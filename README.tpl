@@ -6,7 +6,8 @@
 
 ## Contributing
 
-Pull requests are welcome! Please follow the [code of conduct](CODE_OF_CONDUCT.md).
+Pull requests are welcome! Please follow the
+[code of conduct](https://github.com/sunshowers-code/.github/blob/main/CODE_OF_CONDUCT.md).
 
 ## License
 
