@@ -37,6 +37,13 @@
 //! }
 //! ```
 //!
+//! # Minimum supported Rust version
+//!
+//! The minimum supported Rust version (MSRV) is **1.39**, same as the `bytes` crate.
+//!
+//! The MSRV is not expected to change in the future. If it does, it will be done as a breaking
+//! change.
+
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::{
     collections::VecDeque,
