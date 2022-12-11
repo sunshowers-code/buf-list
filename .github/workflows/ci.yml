@@ -24,6 +24,15 @@ jobs:
         run: cargo xfmt --check
       - name: Lint (clippy)
         run: cargo clippy --all-features --all-targets
+      - name: Install cargo readme
+        uses: baptiste0928/cargo-install@v1
+        with:
+          crate: cargo-readme
+          version: latest
+      - name: Run cargo readme
+        run: ./scripts/regenerate-readmes.sh
+      - name: Check for differences
+        run: git diff --exit-code
 
   build:
     name: Build and test
@@ -48,4 +57,4 @@ jobs:
       - name: Test
         # Dev dependencies have an MSRV > 1.39.
         if: ${{ matrix.rust-version == 'stable' }}
-        run: cargo test --all-features
+        run: cargo test
