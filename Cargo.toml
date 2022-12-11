@@ -1,6 +1,6 @@
 [package]
 name = "buf-list"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2018"
 description = "A list of buffers that implements the bytes::Buf trait"
 categories = ["network-programming", "data-structures"]
