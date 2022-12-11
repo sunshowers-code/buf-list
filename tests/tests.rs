@@ -166,7 +166,7 @@ fn test_into_iter() {
         .into_iter()
         .collect::<BufList>();
 
-    let into_iter = buf_list.into_iter();
+    let  into_iter = buf_list.into_iter();
     println!("{:?}", into_iter);
     let mut into_iter = into_iter.clone();
     assert_eq!(into_iter.next(), Some(Bytes::from_static(&b"hello"[..])));

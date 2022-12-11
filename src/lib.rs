@@ -4,7 +4,36 @@
 
 #![forbid(unsafe_code)]
 
-//! A list of [`Buf`] chunks.
+//! A list of [`bytes::Bytes`] chunks.
+//!
+//! # Overview
+//!
+//! This crate provides a [`BufList`] type that is a list of [`Bytes`] chunks.
+//! The type implements [`bytes::Buf`], so it can be used in any APIs that use `Buf`.
+//!
+//! The main use case for [`BufList`] is to buffer data received as a stream of chunks without
+//! having to copy them into a single contiguous chunk of memory. The [`BufList`] can then be passed
+//! into any APIs that accept `Buf`.
+//!
+//! # Examples
+//!
+//! Gather chunks into a `BufList`, then write them all out to standard error in one go:
+//!
+//! ```
+//! use buf_list::BufList;
+//! use tokio::io::AsyncWriteExt;
+//!
+//! #[tokio::main(flavor = "current_thread")]
+//! async fn main() {
+//!     let mut buf_list = BufList::new();
+//!     buf_list.push_chunk(&b"hello"[..]);
+//!     buf_list.push_chunk(&b"world"[..]);
+//!     buf_list.push_chunk(&b"!"[..]);
+//!
+//!     let mut stderr = tokio::io::stderr();
+//!     stderr.write_all_buf(&mut buf_list).await.unwrap();
+//! }
+//! ```
 //!
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::{
