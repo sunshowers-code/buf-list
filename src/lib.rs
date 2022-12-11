@@ -18,9 +18,22 @@ impl BufList {
     /// Creates a new, empty, `BufList`.
     #[inline]
     pub fn new() -> Self {
-        Self {
-            bufs: VecDeque::new(),
-        }
+        Self::default()
+    }
+
+    /// Returns the total number of chunks in this `BufList`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use buf_list::BufList;
+    ///
+    /// let buf_list = vec![&b"hello"[..], &b"world"[..]].into_iter().collect::<BufList>();
+    /// assert_eq!(buf_list.num_chunks(), 2);
+    /// ```
+    #[inline]
+    pub fn num_chunks(&self) -> usize {
+        self.bufs.len()
     }
 
     /// Returns the total number of bytes across all chunks.
@@ -39,6 +52,29 @@ impl BufList {
     }
 
     /// Adds a new chunk to this list.
+    ///
+    /// If the provided [`Buf`] is zero-length, it will not be added to the list.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use buf_list::BufList;
+    /// use bytes::{Buf, Bytes};
+    ///
+    /// let mut buf_list = BufList::new();
+    ///
+    /// // &'static [u8] implements Buf.
+    /// buf_list.push_chunk(&b"hello"[..]);
+    /// assert_eq!(buf_list.chunk(), &b"hello"[..]);
+    ///
+    /// // Bytes also implements Buf.
+    /// buf_list.push_chunk(Bytes::from_static(&b"world"[..]));
+    /// assert_eq!(buf_list.num_chunks(), 2);
+    ///
+    /// // A zero-length `Buf` will not be added to the list.
+    /// buf_list.push_chunk(Bytes::new());
+    /// assert_eq!(buf_list.num_chunks(), 2);
+    /// ```
     pub fn push_chunk(&mut self, mut data: impl Buf) -> Bytes {
         let len = data.remaining();
         // `data` is (almost) certainly a `Bytes`, so `copy_to_bytes` should
@@ -47,8 +83,7 @@ impl BufList {
         // now clone.
         let bytes = data.copy_to_bytes(len);
 
-        // Buffer a clone of the bytes read on this poll.
-        // Don't push zero-length bufs to uphold the invariant.
+        // Buffer a clone. Don't push zero-length bufs to uphold the invariant.
         if len > 0 {
             self.bufs.push_back(bytes.clone());
         }

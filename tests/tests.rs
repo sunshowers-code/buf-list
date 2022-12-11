@@ -1,0 +1,112 @@
+// Copyright (c) The buf-list Contributors
+// SPDX-License-Identifier: Apache-2.0
+
+use std::{io::IoSlice, ops::Deref};
+
+use buf_list::BufList;
+use bytes::Buf;
+
+#[test]
+fn test_basic() {
+    let mut buf_list = vec![&b"hello"[..], &b"world"[..]]
+        .into_iter()
+        .collect::<BufList>();
+    println!("{:?}", buf_list);
+    assert_eq!(buf_list.num_bytes(), 10);
+    assert_eq!(buf_list.num_chunks(), 2);
+
+    let chunk = buf_list.push_chunk(&b"foo"[..]);
+    assert_eq!(buf_list.num_bytes(), 13);
+    assert_eq!(buf_list.num_chunks(), 3);
+    assert_eq!(chunk, &b"foo"[..]);
+
+    // Try inserting a zero-length chunk. This should not count as a chunk.
+    buf_list.push_chunk(&[] as &[u8]);
+    assert_eq!(buf_list.num_bytes(), 13);
+    assert_eq!(buf_list.num_chunks(), 3);
+
+    {
+        let mut buf_list = buf_list.clone();
+
+        assert_eq!(buf_list.chunk(), &b"hello"[..]);
+
+        // Advance by 2. This won't consume the first chunk.
+        buf_list.advance(2);
+        assert_eq!(buf_list.num_bytes(), 11);
+        assert_eq!(buf_list.num_chunks(), 3);
+        assert_eq!(buf_list.chunk(), &b"llo"[..]);
+
+        // Advance by 3. This will consume the "hello" chunk exactly.
+        buf_list.advance(3);
+        assert_eq!(buf_list.num_bytes(), 8);
+        assert_eq!(buf_list.num_chunks(), 2);
+        assert_eq!(buf_list.chunk(), &b"world"[..]);
+
+        // Advance by 6. This will consume the "world" chunk + the first byte of "foo".
+        buf_list.advance(6);
+        assert_eq!(buf_list.num_bytes(), 2);
+        assert_eq!(buf_list.num_chunks(), 1);
+        assert_eq!(buf_list.chunk(), &b"oo"[..]);
+
+        // Advance by 2. This will consume the "foo" chunk exactly.
+        buf_list.advance(2);
+        assert_eq!(buf_list.num_bytes(), 0);
+        assert_eq!(buf_list.num_chunks(), 0);
+        assert_eq!(buf_list.chunk(), &[] as &[u8]);
+    }
+
+    {
+        // Test chunks_vectored.
+        let mut chunks_vectored = vec![IoSlice::new(&[]); 5];
+        let ret = buf_list.chunks_vectored(&mut chunks_vectored);
+        assert_eq!(ret, 3);
+        assert_eq!(chunks_vectored[0].deref(), &b"hello"[..]);
+        assert_eq!(chunks_vectored[1].deref(), &b"world"[..]);
+        assert_eq!(chunks_vectored[2].deref(), &b"foo"[..]);
+        assert_eq!(chunks_vectored[3].deref(), &[] as &[u8]);
+
+        // Test chunks_vectored with a smaller buffer.
+        let mut chunks_vectored = vec![IoSlice::new(&[]); 2];
+        let ret = buf_list.chunks_vectored(&mut chunks_vectored);
+        assert_eq!(ret, 2);
+        assert_eq!(chunks_vectored[0].deref(), &b"hello"[..]);
+        assert_eq!(chunks_vectored[1].deref(), &b"world"[..]);
+
+        // Test with an empty buffer.
+        let mut chunks_vectored = vec![];
+        let ret = buf_list.chunks_vectored(&mut chunks_vectored);
+        assert_eq!(ret, 0);
+    }
+
+    {
+        // Test copy_to_bytes.
+        let mut buf_list = buf_list.clone();
+
+        // Copy the first two bytes -- this should just be a refcount.
+        let bytes = buf_list.copy_to_bytes(2);
+        assert_eq!(bytes, &b"he"[..]);
+        assert_eq!(buf_list.num_bytes(), 11);
+        assert_eq!(buf_list.num_chunks(), 3);
+
+        // Copy the next 3 bytes. This should consume the buffer.
+        let bytes = buf_list.copy_to_bytes(3);
+        assert_eq!(bytes, &b"llo"[..]);
+        assert_eq!(buf_list.num_bytes(), 8);
+        assert_eq!(buf_list.num_chunks(), 2);
+
+        // Copy 6 bytes. This should consume the next buffer.
+        let bytes = buf_list.copy_to_bytes(6);
+        assert_eq!(bytes, &b"worldf"[..]);
+        assert_eq!(buf_list.num_bytes(), 2);
+        assert_eq!(buf_list.num_chunks(), 1);
+    }
+}
+
+#[test]
+#[should_panic = "`len` (12) greater than remaining (10)"]
+fn test_copy_to_bytes_panic() {
+    let mut buf_list = vec![&b"hello"[..], &b"world"[..]]
+        .into_iter()
+        .collect::<BufList>();
+    buf_list.copy_to_bytes(12);
+}
