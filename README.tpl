@@ -1,6 +1,6 @@
 # {{crate}}
 
-[![buf-list on crates.io](https://img.shields.io/crates/v/buf-list)](https://crates.io/crates/buf-list) [![Documentation (latest release)](https://docs.rs/buf-list/badge.svg)](https://docs.rs/buf-list/) [![Documentation (main)](https://img.shields.io/badge/docs-main-brightgreen)](https://sunshowers-code.github.io/buf-list/rustdoc/buf_list/) [![License](https://img.shields.io/badge/license-Apache-green.svg)](LICENSE-APACHE) [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE-MIT)
+[![buf-list on crates.io](https://img.shields.io/crates/v/buf-list)](https://crates.io/crates/buf-list) [![Documentation (latest release)](https://docs.rs/buf-list/badge.svg)](https://docs.rs/buf-list/) [![Documentation (main)](https://img.shields.io/badge/docs-main-brightgreen)](https://sunshowers-code.github.io/buf-list/rustdoc/buf_list/) [![License](https://img.shields.io/badge/license-Apache-green.svg)](LICENSE)
 
 {{readme}}
 
