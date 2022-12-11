@@ -4,7 +4,7 @@
 use std::{io::IoSlice, ops::Deref};
 
 use buf_list::BufList;
-use bytes::Buf;
+use bytes::{Buf, Bytes};
 
 #[test]
 fn test_basic() {
@@ -107,6 +107,72 @@ fn test_basic() {
         assert_eq!(buf_list.num_bytes(), 0);
         assert_eq!(buf_list.num_chunks(), 0);
     }
+}
+
+#[test]
+fn test_iter() {
+    let buf_list = vec![&b"hello"[..], &b"world"[..], &b"foo"[..], &b"bar"[..]]
+        .into_iter()
+        .collect::<BufList>();
+
+    // Test iteration over the buf_list.
+    let mut iter = (&buf_list).into_iter();
+    println!("{:?}", iter);
+    assert_eq!(iter.next(), Some(&Bytes::from_static(&b"hello"[..])));
+    assert_eq!(iter.size_hint(), (3, Some(3)));
+    assert_eq!(iter.len(), 3);
+
+    {
+        let mut iter = iter.clone();
+        assert_eq!(iter.nth(0), Some(&Bytes::from_static(&b"world"[..])));
+        assert_eq!(iter.last(), Some(&Bytes::from_static(&b"bar"[..])));
+    }
+
+    {
+        let iter = iter.clone();
+        let v = iter.fold(vec![], |mut v, item| {
+            v.push(item);
+            v
+        });
+        assert_eq!(
+            v,
+            vec![
+                &Bytes::from_static(&b"world"[..]),
+                &Bytes::from_static(&b"foo"[..]),
+                &Bytes::from_static(&b"bar"[..]),
+            ]
+        );
+    }
+
+    {
+        let mut iter = iter.clone();
+        assert_eq!(iter.next_back(), Some(&Bytes::from_static(&b"bar"[..])));
+        assert_eq!(
+            iter.rfold(vec![], |mut v, item| {
+                v.push(item);
+                v
+            }),
+            vec![
+                &Bytes::from_static(&b"foo"[..]),
+                &Bytes::from_static(&b"world"[..]),
+            ]
+        );
+    }
+}
+
+#[test]
+fn test_into_iter() {
+    let buf_list = vec![&b"hello"[..], &b"world"[..], &b"foo"[..], &b"bar"[..]]
+        .into_iter()
+        .collect::<BufList>();
+
+    let into_iter = buf_list.into_iter();
+    println!("{:?}", into_iter);
+    let mut into_iter = into_iter.clone();
+    assert_eq!(into_iter.next(), Some(Bytes::from_static(&b"hello"[..])));
+    assert_eq!(into_iter.size_hint(), (3, Some(3)));
+    assert_eq!(into_iter.len(), 3);
+    assert_eq!(into_iter.next_back(), Some(Bytes::from_static(&b"bar"[..])));
 }
 
 #[test]

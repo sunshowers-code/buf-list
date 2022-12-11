@@ -2,8 +2,16 @@
 // Copyright (c) The buf-list Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+#![forbid(unsafe_code)]
+
+//! A list of [`Buf`] chunks.
+//!
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use std::{collections::VecDeque, io::IoSlice, iter::FromIterator};
+use std::{
+    collections::VecDeque,
+    io::IoSlice,
+    iter::{FromIterator, FusedIterator},
+};
 
 /// Data composed of a list of [`Bytes`] chunks.
 ///
@@ -49,6 +57,14 @@ impl BufList {
     #[inline]
     pub fn num_bytes(&self) -> usize {
         self.remaining()
+    }
+
+    /// Iterates over the chunks in this list.
+    #[inline]
+    pub fn iter(&self) -> Iter<'_> {
+        Iter {
+            iter: self.bufs.iter(),
+        }
     }
 
     /// Adds a new chunk to this list.
@@ -103,6 +119,28 @@ where
             buf_list.push_chunk(buf);
         }
         buf_list
+    }
+}
+
+impl IntoIterator for BufList {
+    type Item = Bytes;
+    type IntoIter = IntoIter;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter {
+            iter: self.bufs.into_iter(),
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a BufList {
+    type Item = &'a Bytes;
+    type IntoIter = Iter<'a>;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 
@@ -183,3 +221,118 @@ impl Buf for BufList {
         }
     }
 }
+
+/// An owned iterator over chunks in a [`BufList`].
+///
+/// Returned by the [`IntoIterator`] implementation for [`BufList`].
+#[derive(Clone, Debug)]
+pub struct IntoIter {
+    iter: std::collections::vec_deque::IntoIter<Bytes>,
+}
+
+impl Iterator for IntoIter {
+    type Item = Bytes;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+}
+
+impl DoubleEndedIterator for IntoIter {
+    #[inline]
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.iter.next_back()
+    }
+}
+
+impl ExactSizeIterator for IntoIter {
+    #[inline]
+    fn len(&self) -> usize {
+        self.iter.len()
+    }
+}
+
+impl FusedIterator for IntoIter {}
+
+/// A borrowed iterator over chunks in a [`BufList`].
+///
+/// Returned by [`BufList::chunks`], and by the [`IntoIterator`] implementation for [`&'a BufList`].
+#[derive(Clone, Debug)]
+pub struct Iter<'a> {
+    iter: std::collections::vec_deque::Iter<'a, Bytes>,
+}
+
+impl<'a> Iterator for Iter<'a> {
+    type Item = &'a Bytes;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+
+    // These methods are implemented manually to forward to the underlying
+    // iterator.
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+
+    // fold has a special implementation, so forward it.
+    #[inline]
+    fn fold<B, F>(self, init: B, f: F) -> B
+    where
+        Self: Sized,
+        F: FnMut(B, Self::Item) -> B,
+    {
+        self.iter.fold(init, f)
+    }
+
+    // Can't implement try_fold as it uses `std::ops::Try` which isn't stable yet, as of Rust 1.67
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.iter.nth(n)
+    }
+
+    #[inline]
+    fn last(self) -> Option<Self::Item>
+    where
+        Self: Sized,
+    {
+        self.iter.last()
+    }
+}
+
+impl<'a> DoubleEndedIterator for Iter<'a> {
+    #[inline]
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.iter.next_back()
+    }
+
+    #[inline]
+    fn rfold<B, F>(self, init: B, f: F) -> B
+    where
+        Self: Sized,
+        F: FnMut(B, Self::Item) -> B,
+    {
+        self.iter.rfold(init, f)
+    }
+
+    // Can't implement try_rfold as it uses `std::ops::Try` which isn't stable yet, as of Rust 1.67.
+}
+
+impl<'a> ExactSizeIterator for Iter<'a> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.iter.len()
+    }
+}
+
+impl<'a> FusedIterator for Iter<'a> {}
