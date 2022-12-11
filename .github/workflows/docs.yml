@@ -18,6 +18,7 @@ jobs:
         run: cargo doc --all-features
       - name: Organize
         run: |
+          rm -rf target/gh-pages
           mkdir target/gh-pages
           mv target/doc target/gh-pages/rustdoc
           touch target/gh-pages/.nojekyll
