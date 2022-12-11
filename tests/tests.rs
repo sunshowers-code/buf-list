@@ -123,7 +123,10 @@ fn test_iter() {
 
     {
         let mut iter = iter.clone();
-        assert_eq!(iter.nth(0), Some(&Bytes::from_static(&b"world"[..])));
+        #[allow(clippy::iter_nth_zero)]
+        {
+            assert_eq!(iter.nth(0), Some(&Bytes::from_static(&b"world"[..])));
+        }
         assert_eq!(iter.last(), Some(&Bytes::from_static(&b"bar"[..])));
     }
 
@@ -167,6 +170,7 @@ fn test_into_iter() {
 
     let into_iter = buf_list.into_iter();
     println!("{:?}", into_iter);
+    #[allow(clippy::redundant_clone)]
     let mut into_iter = into_iter.clone();
     assert_eq!(into_iter.next(), Some(Bytes::from_static(&b"hello"[..])));
     assert_eq!(into_iter.size_hint(), (3, Some(3)));
