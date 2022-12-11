@@ -1,10 +1,9 @@
 // Copyright (c) The buf-list Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{io::IoSlice, ops::Deref};
-
 use buf_list::BufList;
 use bytes::{Buf, Bytes};
+use std::{io::IoSlice, ops::Deref};
 
 #[test]
 fn test_basic() {
@@ -166,7 +165,7 @@ fn test_into_iter() {
         .into_iter()
         .collect::<BufList>();
 
-    let  into_iter = buf_list.into_iter();
+    let into_iter = buf_list.into_iter();
     println!("{:?}", into_iter);
     let mut into_iter = into_iter.clone();
     assert_eq!(into_iter.next(), Some(Bytes::from_static(&b"hello"[..])));
