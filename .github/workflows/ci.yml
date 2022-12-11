@@ -30,7 +30,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ windows-latest, ubuntu-latest ]
+        os: [ ubuntu-latest ]
         # 1.39 is the MSRV
         rust-version: [ 1.39, stable ]
       fail-fast: false
@@ -46,5 +46,6 @@ jobs:
       - name: Build
         run: cargo build
       - name: Test
+        # Dev dependencies have an MSRV > 1.39.
         if: ${{ matrix.rust-version == 'stable' }}
         run: cargo test --all-features
