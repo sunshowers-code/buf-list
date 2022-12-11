@@ -99,6 +99,13 @@ fn test_basic() {
         assert_eq!(bytes, &b"worldf"[..]);
         assert_eq!(buf_list.num_bytes(), 2);
         assert_eq!(buf_list.num_chunks(), 1);
+
+        // Copy the last 2 bytes + this next buffer -- ensure that all buffers are consumed.
+        buf_list.push_chunk(&b"bar"[..]);
+        let bytes = buf_list.copy_to_bytes(5);
+        assert_eq!(bytes, &b"oobar"[..]);
+        assert_eq!(buf_list.num_bytes(), 0);
+        assert_eq!(buf_list.num_chunks(), 0);
     }
 }
 
