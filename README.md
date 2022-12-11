@@ -13,6 +13,8 @@ The main use case for `BufList` is to buffer data received as a stream of chunks
 having to copy them into a single contiguous chunk of memory. The `BufList` can then be passed
 into any APIs that accept `Buf`.
 
+If you've ever wanted a `Vec<Bytes>` or a `VecDeque<Bytes>`, this type is for you.
+
 ## Examples
 
 Gather chunks into a `BufList`, then write them all out to standard error in one go:
