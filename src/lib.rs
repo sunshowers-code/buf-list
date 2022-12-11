@@ -300,7 +300,7 @@ impl FusedIterator for IntoIter {}
 
 /// A borrowed iterator over chunks in a [`BufList`].
 ///
-/// Returned by [`BufList::chunks`], and by the [`IntoIterator`] implementation for [`&'a BufList`].
+/// Returned by [`BufList::iter`], and by the [`IntoIterator`] implementation for `&'a BufList`.
 #[derive(Clone, Debug)]
 pub struct Iter<'a> {
     iter: std::collections::vec_deque::Iter<'a, Bytes>,
