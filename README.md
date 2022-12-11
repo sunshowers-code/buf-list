@@ -2,15 +2,15 @@
 
 [![buf-list on crates.io](https://img.shields.io/crates/v/buf-list)](https://crates.io/crates/buf-list) [![Documentation (latest release)](https://docs.rs/buf-list/badge.svg)](https://docs.rs/buf-list/) [![Documentation (main)](https://img.shields.io/badge/docs-main-brightgreen)](https://sunshowers.github.io/buf-list/rustdoc/debug_ignore/) [![License](https://img.shields.io/badge/license-Apache-green.svg)](LICENSE-APACHE) [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE-MIT)
 
-A list of [`bytes::Bytes`] chunks.
+A list of `bytes::Bytes` chunks.
 
 ## Overview
 
-This crate provides a [`BufList`] type that is a list of [`Bytes`] chunks.
-The type implements [`bytes::Buf`], so it can be used in any APIs that use `Buf`.
+This crate provides a `BufList` type that is a list of `Bytes` chunks.
+The type implements `bytes::Buf`, so it can be used in any APIs that use `Buf`.
 
-The main use case for [`BufList`] is to buffer data received as a stream of chunks without
-having to copy them into a single contiguous chunk of memory. The [`BufList`] can then be passed
+The main use case for `BufList` is to buffer data received as a stream of chunks without
+having to copy them into a single contiguous chunk of memory. The `BufList` can then be passed
 into any APIs that accept `Buf`.
 
 ## Examples
