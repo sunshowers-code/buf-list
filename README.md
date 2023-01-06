@@ -23,16 +23,33 @@ Gather chunks into a `BufList`, then write them all out to standard error in one
 use buf_list::BufList;
 use tokio::io::AsyncWriteExt;
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() {
-    let mut buf_list = BufList::new();
-    buf_list.push_chunk(&b"hello "[..]);
-    buf_list.push_chunk(&b"world"[..]);
-    buf_list.push_chunk(&b"!"[..]);
+let mut buf_list = BufList::new();
+buf_list.push_chunk(&b"hello "[..]);
+buf_list.push_chunk(&b"world"[..]);
+buf_list.push_chunk(&b"!"[..]);
 
-    let mut stderr = tokio::io::stderr();
-    stderr.write_all_buf(&mut buf_list).await.unwrap();
-}
+let mut stderr = tokio::io::stderr();
+stderr.write_all_buf(&mut buf_list).await?;
+```
+
+Collect a fallible stream of `Bytes` into a `BufList`:
+
+```rust
+use buf_list::BufList;
+use bytes::Bytes;
+use futures::stream::TryStreamExt;
+
+// A common example is a stream of bytes read over HTTP.
+let stream = futures::stream::iter(
+    vec![
+        Ok(Bytes::from_static(&b"laputa, "[..])),
+        Ok(Bytes::from_static(&b"castle "[..])),
+        Ok(Bytes::from_static(&b"in the sky"[..]))
+    ],
+);
+
+let buf_list = stream.try_collect::<BufList>().await?;
+assert_eq!(buf_list.num_chunks(), 3);
 ```
 
 ## Minimum supported Rust version

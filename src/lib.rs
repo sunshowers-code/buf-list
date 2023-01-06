@@ -25,16 +25,39 @@
 //! use buf_list::BufList;
 //! use tokio::io::AsyncWriteExt;
 //!
-//! #[tokio::main(flavor = "current_thread")]
-//! async fn main() {
-//!     let mut buf_list = BufList::new();
-//!     buf_list.push_chunk(&b"hello "[..]);
-//!     buf_list.push_chunk(&b"world"[..]);
-//!     buf_list.push_chunk(&b"!"[..]);
+//! # #[tokio::main(flavor = "current_thread")]
+//! # async fn main() -> Result<(), std::io::Error> {
+//! let mut buf_list = BufList::new();
+//! buf_list.push_chunk(&b"hello "[..]);
+//! buf_list.push_chunk(&b"world"[..]);
+//! buf_list.push_chunk(&b"!"[..]);
 //!
-//!     let mut stderr = tokio::io::stderr();
-//!     stderr.write_all_buf(&mut buf_list).await.unwrap();
-//! }
+//! let mut stderr = tokio::io::stderr();
+//! stderr.write_all_buf(&mut buf_list).await?;
+//! # Ok(()) }
+//! ```
+//!
+//! Collect a fallible stream of `Bytes` into a `BufList`:
+//!
+//! ```
+//! use buf_list::BufList;
+//! use bytes::Bytes;
+//! use futures::stream::TryStreamExt;
+//!
+//! # #[tokio::main(flavor = "current_thread")]
+//! # async fn main() -> Result<(), ()> {
+//! // A common example is a stream of bytes read over HTTP.
+//! let stream = futures::stream::iter(
+//!     vec![
+//!         Ok(Bytes::from_static(&b"laputa, "[..])),
+//!         Ok(Bytes::from_static(&b"castle "[..])),
+//!         Ok(Bytes::from_static(&b"in the sky"[..]))
+//!     ],
+//! );
+//!
+//! let buf_list = stream.try_collect::<BufList>().await?;
+//! assert_eq!(buf_list.num_chunks(), 3);
+//! # Ok(()) }
 //! ```
 //!
 //! # Minimum supported Rust version
@@ -147,10 +170,15 @@ impl BufList {
     }
 }
 
-impl<B> FromIterator<B> for BufList
-where
-    B: Buf,
-{
+impl<B: Buf> Extend<B> for BufList {
+    fn extend<T: IntoIterator<Item = B>>(&mut self, iter: T) {
+        for buf in iter.into_iter() {
+            self.push_chunk(buf);
+        }
+    }
+}
+
+impl<B: Buf> FromIterator<B> for BufList {
     fn from_iter<T: IntoIterator<Item = B>>(iter: T) -> Self {
         let mut buf_list = BufList::new();
         for buf in iter.into_iter() {
