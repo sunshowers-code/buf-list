@@ -129,7 +129,7 @@ impl BufList {
     /// buf_list.push_chunk(Bytes::new());
     /// assert_eq!(buf_list.num_chunks(), 2);
     /// ```
-    pub fn push_chunk(&mut self, mut data: impl Buf) -> Bytes {
+    pub fn push_chunk<B: Buf>(&mut self, mut data: B) -> Bytes {
         let len = data.remaining();
         // `data` is (almost) certainly a `Bytes`, so `copy_to_bytes` should
         // internally be a cheap refcount bump almost all of the time.
