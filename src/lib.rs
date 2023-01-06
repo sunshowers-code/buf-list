@@ -4,7 +4,7 @@
 
 #![forbid(unsafe_code)]
 
-//! A list of [`bytes::Bytes`] chunks.
+//! A segmented list of [`bytes::Bytes`] chunks.
 //!
 //! # Overview
 //!
@@ -28,7 +28,7 @@
 //! #[tokio::main(flavor = "current_thread")]
 //! async fn main() {
 //!     let mut buf_list = BufList::new();
-//!     buf_list.push_chunk(&b"hello"[..]);
+//!     buf_list.push_chunk(&b"hello "[..]);
 //!     buf_list.push_chunk(&b"world"[..]);
 //!     buf_list.push_chunk(&b"!"[..]);
 //!

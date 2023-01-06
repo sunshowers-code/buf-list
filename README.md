@@ -2,7 +2,7 @@
 
 [![buf-list on crates.io](https://img.shields.io/crates/v/buf-list)](https://crates.io/crates/buf-list) [![Documentation (latest release)](https://docs.rs/buf-list/badge.svg)](https://docs.rs/buf-list/) [![Documentation (main)](https://img.shields.io/badge/docs-main-brightgreen)](https://sunshowers-code.github.io/buf-list/rustdoc/buf_list/) [![License](https://img.shields.io/badge/license-Apache-green.svg)](LICENSE)
 
-A list of `bytes::Bytes` chunks.
+A segmented list of `bytes::Bytes` chunks.
 
 ## Overview
 
@@ -26,7 +26,7 @@ use tokio::io::AsyncWriteExt;
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     let mut buf_list = BufList::new();
-    buf_list.push_chunk(&b"hello"[..]);
+    buf_list.push_chunk(&b"hello "[..]);
     buf_list.push_chunk(&b"world"[..]);
     buf_list.push_chunk(&b"!"[..]);
 
