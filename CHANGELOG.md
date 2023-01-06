@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.0.0] - 2023-01-06
+
+### Added
+
+- `BufList` now implements `Extend<B: Buf>`. This means you can now collect a stream of `Bytes`, or other `Buf` chunks, directly into a `BufList` via [`StreamExt::collect`](https://docs.rs/futures/latest/futures/stream/trait.StreamExt.html#method.collect).
+  - Collecting a fallible stream is also possible, via [`TryStreamExt::try_collect`](https://docs.rs/futures/latest/futures/stream/trait.TryStreamExt.html#method.try_collect).
+
+### Changed
+
+- `push_chunk` now has a type parameter `B: Buf` rather than `impl Buf`.
+
 ## [0.1.3] - 2022-12-11
 
 - Fix license indication in README: this crate is Apache-2.0 only, not MIT OR Apache-2.0.
@@ -21,6 +32,7 @@ This project adheres to [Semantic Versioning](https://semver.org).
 
 - Initial release.
 
+[1.0.0]: https://github.com/sunshowers-code/buf-list/releases/tag/1.0.0
 [0.1.3]: https://github.com/sunshowers-code/buf-list/releases/tag/0.1.3
 [0.1.2]: https://github.com/sunshowers-code/buf-list/releases/tag/0.1.2
 [0.1.1]: https://github.com/sunshowers-code/buf-list/releases/tag/0.1.1
