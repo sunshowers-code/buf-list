@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["BufList","Data composed of a list of [`Bytes`] chunks."],["IntoIter","An owned iterator over chunks in a [`BufList`]."],["Iter","A borrowed iterator over chunks in a [`BufList`]."]]};
