@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.0.1] - 2023-02-16
+
+### Added
+
+- Add recipes for converting a `BufList` into a `Stream` or a `TryStream`.
+
 ## [1.0.0] - 2023-01-06
 
 ### Added
@@ -32,6 +38,7 @@ This project adheres to [Semantic Versioning](https://semver.org).
 
 - Initial release.
 
+[1.0.1]: https://github.com/sunshowers-code/buf-list/releases/tag/1.0.1
 [1.0.0]: https://github.com/sunshowers-code/buf-list/releases/tag/1.0.0
 [0.1.3]: https://github.com/sunshowers-code/buf-list/releases/tag/0.1.3
 [0.1.2]: https://github.com/sunshowers-code/buf-list/releases/tag/0.1.2

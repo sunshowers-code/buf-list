@@ -42,7 +42,7 @@
 //! ```
 //! use buf_list::BufList;
 //! use bytes::Bytes;
-//! use futures::stream::TryStreamExt;
+//! use futures::TryStreamExt;
 //!
 //! # #[tokio::main(flavor = "current_thread")]
 //! # async fn main() -> Result<(), ()> {
@@ -58,6 +58,28 @@
 //! let buf_list = stream.try_collect::<BufList>().await?;
 //! assert_eq!(buf_list.num_chunks(), 3);
 //! # Ok(()) }
+//! ```
+//!
+//! # Converting to `Stream`s
+//!
+//! A `BufList` can be converted into a `futures::Stream`, or a `TryStream`, of `Bytes` chunks. Use
+//! this recipe to do so:
+//!
+//! (This will be exposed as an API on `BufList` once `Stream` and/or `TryStream` become part of
+//! stable Rust.)
+//!
+//! ```rust
+//! use buf_list::BufList;
+//! use bytes::Bytes;
+//! use futures::{Stream, TryStream};
+//!
+//! fn into_stream(buf_list: BufList) -> impl Stream<Item = Bytes> {
+//!     futures::stream::iter(buf_list)
+//! }
+//!
+//! fn into_try_stream<E>(buf_list: BufList) -> impl TryStream<Ok = Bytes, Error = E> {
+//!     futures::stream::iter(buf_list.into_iter().map(Ok))
+//! }
 //! ```
 //!
 //! # Minimum supported Rust version
