@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## Unreleased
+
+### Added
+
+- `BufList::get_chunk` returns the chunk at the provided index.
+
 ## [1.0.1] - 2023-02-16
 
 ### Added

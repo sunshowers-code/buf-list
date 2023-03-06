@@ -142,6 +142,22 @@ impl BufList {
         self.remaining()
     }
 
+    /// Provides a reference to the chunk at the given index.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use buf_list::BufList;
+    /// use bytes::Bytes;
+    ///
+    /// let buf_list = vec![&b"hello"[..], &b"world"[..]].into_iter().collect::<BufList>();
+    /// assert_eq!(buf_list.get_chunk(1), Some(&Bytes::from(&b"world"[..])));
+    /// ```
+    #[inline]
+    pub fn get_chunk(&self, index: usize) -> Option<&Bytes> {
+        self.bufs.get(index)
+    }
+
     /// Iterates over the chunks in this list.
     #[inline]
     pub fn iter(&self) -> Iter<'_> {
