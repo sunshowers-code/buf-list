@@ -3,19 +3,27 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #![forbid(unsafe_code)]
+#![warn(missing_docs)]
+#![cfg_attr(doc_cfg, feature(doc_cfg, doc_auto_cfg))]
 
 //! A segmented list of [`bytes::Bytes`] chunks.
 //!
 //! # Overview
 //!
-//! This crate provides a [`BufList`] type that is a list of [`Bytes`] chunks.
-//! The type implements [`bytes::Buf`], so it can be used in any APIs that use `Buf`.
+//! This crate provides a [`BufList`] type that is a list of [`Bytes`](bytes::Bytes) chunks. The
+//! type implements [`bytes::Buf`], so it can be used in any APIs that use `Buf`.
 //!
 //! The main use case for [`BufList`] is to buffer data received as a stream of chunks without
 //! having to copy them into a single contiguous chunk of memory. The [`BufList`] can then be passed
 //! into any APIs that accept `Buf`.
 //!
 //! If you've ever wanted a `Vec<Bytes>` or a `VecDeque<Bytes>`, this type is for you.
+//!
+//! # Cursors
+//!
+//! This crate also provides [`Cursor`], which is a cursor type around a [`BufList`]. A [`Cursor`]
+//! around a [`BufList`] implements [`Seek`](std::io::Seek), [`Read`](std::io::Read) and
+//! [`BufRead`](std::io::BufRead), similar to [`std::io::Cursor`].
 //!
 //! # Examples
 //!
@@ -60,7 +68,7 @@
 //! # Ok(()) }
 //! ```
 //!
-//! # Converting to `Stream`s
+//! ## Converting to `Stream`s
 //!
 //! A `BufList` can be converted into a `futures::Stream`, or a `TryStream`, of `Bytes` chunks. Use
 //! this recipe to do so:
@@ -82,13 +90,34 @@
 //! }
 //! ```
 //!
+//! # Optional features
+//!
+//! * `tokio1`: With this feature enabled, [`Cursor`] implements the `tokio` crate's
+//!   [`AsyncSeek`](tokio::io::AsyncSeek), [`AsyncRead`](tokio::io::AsyncRead) and
+//!   [`AsyncBufRead`](tokio::io::AsyncBufRead).
+//!
+//! * `futures03`: With this feature enabled, [`Cursor`] implements the `futures` crate's
+//!   [`AsyncSeek`](futures_io_03::AsyncSeek), [`AsyncRead`](futures_io_03::AsyncRead) and
+//!   [`AsyncBufRead`](futures_io_03::AsyncBufRead).
+//!
+//!   Note that supporting `futures03` means exporting 0.x types as a public interface. **This
+//!   violates the
+//!   [C-STABLE](https://rust-lang.github.io/api-guidelines/necessities.html#public-dependencies-of-a-stable-crate-are-stable-c-stable)
+//!   guideline.** However, the maintainer of `buf-list` considers that acceptable since `futures03`
+//!   is an optional feature and not critical to `buf-list`. As newer versions of the `futures`
+//!   crate are released, `buf-list` will support their versions of the async traits as well.
+//!
 //! # Minimum supported Rust version
 //!
-//! The minimum supported Rust version (MSRV) is **1.39**, same as the `bytes` crate.
+//! The minimum supported Rust version (MSRV) is **1.39**, same as the `bytes` crate. Optional
+//! features may cause a bump in the MSRV.
 //!
-//! The MSRV is not expected to change in the future. If it does, it will be done as a breaking
-//! change.
+//! The MSRV is not expected to change in the future. If the MSRV changes, it will be accompanied by
+//! a major version bump to `buf-list`.
 
+mod cursor;
+pub(crate) mod errors;
 mod imp;
 
+pub use cursor::*;
 pub use imp::*;
