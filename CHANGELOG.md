@@ -8,7 +8,13 @@ This project adheres to [Semantic Versioning](https://semver.org).
 
 ### Added
 
+- A new type `Cursor` which wraps a `BufList` or `&BufList`, and implements `Seek`, `Read` and `BufRead`.
+- `BufList` implements `From<T>` for any `T` that can be converted to `Bytes`. This creates a
+  `BufList` with a single chunk.
 - `BufList::get_chunk` returns the chunk at the provided index.
+- New optional features:
+  - `tokio1`: makes `Cursor` implement tokio's `AsyncSeek`, `AsyncRead` and `AsyncBufRead`
+  - `futures03`: makes `Cursor` implement futures's `AsyncSeek`, `AsyncRead` and `AsyncBufRead`.
 
 ## [1.0.1] - 2023-02-16
 

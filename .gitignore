@@ -1,2 +1,2 @@
 /target
-/Cargo.lock
+# Cargo.lock is checked in to support older Rust versions

@@ -13,9 +13,14 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
+      - name: Update Cargo.lock
+        run: cargo update
       - uses: Swatinem/rust-cache@v2
       - name: Build rustdoc
         run: cargo doc --all-features
+        env:
+          RUSTC_BOOTSTRAP: 1
+          RUSTDOCFLAGS: --cfg=doc_cfg
       - name: Organize
         run: |
           rm -rf target/gh-pages

@@ -25,6 +25,14 @@ impl BufList {
         Self::default()
     }
 
+    /// Creates a new, empty, `BufList` with the given capacity.
+    #[inline]
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            bufs: VecDeque::with_capacity(capacity),
+        }
+    }
+
     /// Returns the total number of chunks in this `BufList`.
     ///
     /// # Examples
@@ -161,6 +169,12 @@ impl<'a> IntoIterator for &'a BufList {
     }
 }
 
+impl AsRef<BufList> for BufList {
+    fn as_ref(&self) -> &BufList {
+        self
+    }
+}
+
 impl Buf for BufList {
     fn remaining(&self) -> usize {
         self.bufs.iter().map(Buf::remaining).sum()
@@ -236,6 +250,14 @@ impl Buf for BufList {
                 buf.freeze()
             }
         }
+    }
+}
+
+impl<T: Into<Bytes>> From<T> for BufList {
+    fn from(value: T) -> Self {
+        let mut buf_list = BufList::with_capacity(1);
+        buf_list.push_chunk(value.into());
+        buf_list
     }
 }
 
