@@ -67,6 +67,7 @@ enum CursorOp {
 impl CursorOp {
     fn apply_and_compare(
         self,
+        // The "mut" here is used in the branches corresponding to optional features.
         #[allow(unused_mut)] mut buf_list: &mut crate::Cursor<&BufList>,
         #[allow(unused_mut)] mut upstream: &mut io::Cursor<&[u8]>,
     ) -> Result<()> {

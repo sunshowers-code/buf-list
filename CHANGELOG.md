@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org).
 
-## Unreleased
+## [1.0.2] - 2023-04-09
 
 ### Added
 
@@ -50,6 +50,7 @@ This project adheres to [Semantic Versioning](https://semver.org).
 
 - Initial release.
 
+[1.0.2]: https://github.com/sunshowers-code/buf-list/releases/tag/1.0.2
 [1.0.1]: https://github.com/sunshowers-code/buf-list/releases/tag/1.0.1
 [1.0.0]: https://github.com/sunshowers-code/buf-list/releases/tag/1.0.0
 [0.1.3]: https://github.com/sunshowers-code/buf-list/releases/tag/0.1.3
