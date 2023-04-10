@@ -17,7 +17,7 @@ rustdoc-args = ["--cfg=doc_cfg"]
 [dependencies]
 bytes = "1.3.0"
 futures-io-03 = { package = "futures-io", version = "0.3.25", optional = true }
-tokio = { version = "1.0.0", features = ["io-std"], optional = true }
+tokio = { version = "1.27.0", features = ["io-std"], optional = true }
 
 [dev-dependencies]
 anyhow = "1.0.70"
@@ -25,7 +25,7 @@ dummy-waker = "1.1.0"
 futures = "0.3.25"
 proptest = "1.1.0"
 test-strategy = "0.3.0"
-tokio = { version = "1.0.0", features = ["io-std", "io-util", "macros", "rt"] }
+tokio = { version = "1.27.0", features = ["io-std", "io-util", "macros", "rt"] }
 
 [features]
 futures03 = ["futures-io-03"]
