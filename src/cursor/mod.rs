@@ -366,7 +366,7 @@ impl CursorData {
         Ok(())
     }
 
-    fn fill_buf_impl<'a>(&'a self, list: &'a BufList) -> &'a [u8] {
+    fn fill_buf_impl<'a>(&'a self, list: &'a BufList) -> &[u8] {
         const EMPTY_SLICE: &[u8] = &[];
         match self.get_chunk_and_pos(list) {
             Some((chunk, chunk_pos)) => &chunk.as_ref()[chunk_pos..],
@@ -382,7 +382,8 @@ impl CursorData {
     fn set_pos(&mut self, list: &BufList, new_pos: u64) {
         match new_pos.cmp(&self.pos) {
             Ordering::Greater => {
-                let next_start = list.get_start_pos().get(self.chunk + 1).copied().into();
+                let start_pos = list.get_start_pos();
+                let next_start = start_pos.get(self.chunk + 1).copied().into();
                 if Offset::Value(new_pos) < next_start {
                     // Within the same chunk.
                 } else {
@@ -391,7 +392,7 @@ impl CursorData {
                     // n).
                     //
                     // Do a binary search for this element.
-                    match list.get_start_pos()[self.chunk + 1..].binary_search(&new_pos) {
+                    match start_pos[self.chunk + 1..].binary_search(&new_pos) {
                         // We're starting the search from self.chunk + 1, which means that the value
                         // returned from binary_search is 1 less than the actual delta.
                         Ok(delta_minus_one) => {
@@ -414,10 +415,11 @@ impl CursorData {
             }
             Ordering::Equal => {}
             Ordering::Less => {
-                if list.get_start_pos().get(self.chunk).copied() <= Some(new_pos) {
+                let start_pos = list.get_start_pos();
+                if start_pos.get(self.chunk).copied() <= Some(new_pos) {
                     // Within the same chunk.
                 } else {
-                    match list.get_start_pos()[..self.chunk].binary_search(&new_pos) {
+                    match start_pos[..self.chunk].binary_search(&new_pos) {
                         Ok(chunk) => {
                             // Exactly at the start point of a chunk.
                             self.chunk = chunk;
