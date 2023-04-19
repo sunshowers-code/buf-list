@@ -439,7 +439,7 @@ impl CursorData {
     }
 
     #[inline]
-    fn get_chunk_and_pos<'a, 'b>(&'a self, list: &'b BufList) -> Option<(&'b Bytes, usize)> {
+    fn get_chunk_and_pos<'b>(&self, list: &'b BufList) -> Option<(&'b Bytes, usize)> {
         match list.get_chunk(self.chunk) {
             Some(chunk) => {
                 // This guarantees that pos is not past the end of the list.
