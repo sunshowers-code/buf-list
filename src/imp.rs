@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use once_cell::sync::OnceCell;
 use std::{
     collections::VecDeque,
     io::IoSlice,
@@ -16,6 +17,10 @@ use std::{
 pub struct BufList {
     // Invariant: none of the bufs in this queue are zero-length.
     bufs: VecDeque<Bytes>,
+
+    /// An index of chunks and their start positions. There's an additional index at the end, which
+    /// is the length of the list (list.num_bytes()).
+    start_pos: OnceCell<Box<[u64]>>,
 }
 
 impl BufList {
@@ -25,11 +30,27 @@ impl BufList {
         Self::default()
     }
 
+    #[inline]
+    pub(crate) fn get_start_pos(&self) -> &[u64] {
+        self.start_pos.get_or_init(|| {
+            let mut start_pos = Vec::with_capacity(self.bufs.len() + 1);
+            let mut next = 0u64;
+            for chunk in self.bufs.iter() {
+                start_pos.push(next);
+                next += chunk.len() as u64;
+            }
+            // Add the length of the chunk at the end.
+            start_pos.push(next);
+            start_pos.into_boxed_slice()
+        })
+    }
+
     /// Creates a new, empty, `BufList` with the given capacity.
     #[inline]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             bufs: VecDeque::with_capacity(capacity),
+            start_pos: OnceCell::new(),
         }
     }
 
@@ -112,6 +133,9 @@ impl BufList {
     /// assert_eq!(buf_list.num_chunks(), 2);
     /// ```
     pub fn push_chunk<B: Buf>(&mut self, mut data: B) -> Bytes {
+        // mutable borrow acquired, invalidate oncecell
+        self.start_pos = OnceCell::new();
+
         let len = data.remaining();
         // `data` is (almost) certainly a `Bytes`, so `copy_to_bytes` should
         // internally be a cheap refcount bump almost all of the time.
@@ -131,6 +155,9 @@ impl BufList {
 
 impl<B: Buf> Extend<B> for BufList {
     fn extend<T: IntoIterator<Item = B>>(&mut self, iter: T) {
+        // mutable borrow acquired, invalidate oncecell
+        self.start_pos = OnceCell::new();
+
         for buf in iter.into_iter() {
             self.push_chunk(buf);
         }
@@ -204,6 +231,9 @@ impl Buf for BufList {
     }
 
     fn advance(&mut self, mut amt: usize) {
+        // mutable borrow acquired, invalidate oncecell
+        self.start_pos = OnceCell::new();
+
         while amt > 0 {
             let rem = self.bufs[0].remaining();
             // If the amount to advance by is less than the first buffer in
@@ -224,6 +254,9 @@ impl Buf for BufList {
     }
 
     fn copy_to_bytes(&mut self, len: usize) -> Bytes {
+        // mutable borrow acquired, invalidate oncecell
+        self.start_pos = OnceCell::new();
+
         // If the length of the requested `Bytes` is <= the length of the front
         // buffer, we can just use its `copy_to_bytes` implementation (which is
         // just a reference count bump).
