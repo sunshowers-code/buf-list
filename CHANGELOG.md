@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.1.0] - 2025-09-29
+
+### Changed
+
+- With `Cursor::read_exact`, if there aren't enough bytes remaining, the position will be set to the end of the buffer. This mirrors the same behavior change in `std::io::Cursor` introduced in Rust 1.80 (see [rust-lang/rust#125404]).
+- MSRV updated to Rust 1.70.
+- Internal improvement: computed start positions for chunks are now stored in a `OnceLock` on the `BufList` rather than being recomputed each time a `Cursor` is constructed. In the case where there might be many `Cursor` instances on the same `&BufList`, this allows for start positions to be shared. Thanks to [inanna-malick](https://github.com/inanna-malick) for your first cntribution!
+
+### Fixed
+
+- Replaced obsolete `doc_auto_cfg` with `doc_cfg`, to fix Rust nightly builds with the `doc_cfg` flag enabled.
+
+[rust-lang/rust#125404]: https://github.com/rust-lang/rust/pull/125404
+
 ## [1.0.3] - 2023-04-09
 
 - Documentation improvements.
@@ -54,6 +68,7 @@ This project adheres to [Semantic Versioning](https://semver.org).
 
 - Initial release.
 
+[1.1.0]: https://github.com/sunshowers-code/buf-list/releases/tag/1.1.0
 [1.0.3]: https://github.com/sunshowers-code/buf-list/releases/tag/1.0.3
 [1.0.2]: https://github.com/sunshowers-code/buf-list/releases/tag/1.0.2
 [1.0.1]: https://github.com/sunshowers-code/buf-list/releases/tag/1.0.1
