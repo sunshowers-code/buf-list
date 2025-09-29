@@ -83,27 +83,10 @@ impl<T: AsRef<BufList>> Cursor<T> {
     ///
     /// let reference = cursor.get_ref();
     /// ```
-    #[cfg(const_fn_trait_bounds)]
     pub const fn get_ref(&self) -> &T {
         &self.inner
     }
 
-    /// Gets a reference to the underlying value in this cursor.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use buf_list::{BufList, Cursor};
-    ///
-    /// let cursor = Cursor::new(BufList::new());
-    ///
-    /// let reference = cursor.get_ref();
-    /// ```
-    #[cfg(not(const_fn_trait_bounds))]
-    pub fn get_ref(&self) -> &T {
-        &self.inner
-    }
-
     /// Returns the current position of this cursor.
     ///
     /// # Examples
@@ -123,32 +106,7 @@ impl<T: AsRef<BufList>> Cursor<T> {
     /// cursor.seek(SeekFrom::Current(-1)).unwrap();
     /// assert_eq!(cursor.position(), 1);
     /// ```
-    #[cfg(const_fn_trait_bounds)]
     pub const fn position(&self) -> u64 {
-        self.data.pos
-    }
-
-    /// Returns the current position of this cursor.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use buf_list::{BufList, Cursor};
-    /// use std::io::prelude::*;
-    /// use std::io::SeekFrom;
-    ///
-    /// let mut cursor = Cursor::new(BufList::from(&[1, 2, 3, 4, 5][..]));
-    ///
-    /// assert_eq!(cursor.position(), 0);
-    ///
-    /// cursor.seek(SeekFrom::Current(2)).unwrap();
-    /// assert_eq!(cursor.position(), 2);
-    ///
-    /// cursor.seek(SeekFrom::Current(-1)).unwrap();
-    /// assert_eq!(cursor.position(), 1);
-    /// ```
-    #[cfg(not(const_fn_trait_bounds))]
-    pub fn position(&self) -> u64 {
         self.data.pos
     }
 
@@ -206,7 +164,6 @@ impl<T: AsRef<BufList>> io::Seek for Cursor<T> {
         self.data.seek_impl(self.inner.as_ref(), style)
     }
 
-    #[cfg(seek_convenience)]
     fn stream_position(&mut self) -> io::Result<u64> {
         Ok(self.data.pos)
     }
@@ -366,7 +323,7 @@ impl CursorData {
         Ok(())
     }
 
-    fn fill_buf_impl<'a>(&'a self, list: &'a BufList) -> &[u8] {
+    fn fill_buf_impl<'a>(&'a self, list: &'a BufList) -> &'a [u8] {
         const EMPTY_SLICE: &[u8] = &[];
         match self.get_chunk_and_pos(list) {
             Some((chunk, chunk_pos)) => &chunk.as_ref()[chunk_pos..],

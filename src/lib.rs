@@ -4,8 +4,7 @@
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
-#![cfg_attr(doc_cfg, feature(doc_cfg, doc_auto_cfg, doc_cfg_hide))]
-#![cfg_attr(doc_cfg, doc(cfg_hide(const_fn_trait_bounds)))]
+#![cfg_attr(doc_cfg, feature(doc_cfg))]
 
 //! A segmented list of [`bytes::Bytes`] chunks.
 //!
