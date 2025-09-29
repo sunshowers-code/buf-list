@@ -8,7 +8,7 @@ mod tests;
 #[cfg(feature = "tokio1")]
 mod tokio_imp;
 
-use crate::{errors::ReadExactError, BufList};
+use crate::{BufList, errors::ReadExactError};
 use bytes::Bytes;
 use std::{
     cmp::Ordering,

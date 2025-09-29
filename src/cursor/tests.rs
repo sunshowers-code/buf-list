@@ -4,14 +4,14 @@
 // Property-based tests for Cursor.
 
 use crate::BufList;
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{Context, Result, bail, ensure};
 use bytes::{Buf, Bytes};
 use proptest::prelude::*;
 use std::{
     fmt,
     io::{self, BufRead, IoSliceMut, Read, Seek, SeekFrom},
 };
-use test_strategy::{proptest, Arbitrary};
+use test_strategy::{Arbitrary, proptest};
 
 /// Assert that buf_list's cursor behaves identically to std::io::Cursor.
 #[proptest]

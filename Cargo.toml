@@ -1,7 +1,7 @@
 [package]
 name = "buf-list"
 version = "1.0.3"
-edition = "2018"
+edition = "2021"
 description = "A list of buffers that implements the bytes::Buf trait"
 categories = ["network-programming", "data-structures"]
 keywords = ["buffers", "zero-copy", "io"]
