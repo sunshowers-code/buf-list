@@ -310,9 +310,15 @@ impl CursorData {
 
     fn read_exact_impl(&mut self, list: &BufList, buf: &mut [u8]) -> io::Result<()> {
         // This is the same as read_impl as long as there's enough space.
-        let remaining = self.num_bytes(list).saturating_sub(self.pos);
+        let total = self.num_bytes(list);
+        let remaining = total.saturating_sub(self.pos);
         let buf_len = buf.len();
         if remaining < buf_len as u64 {
+            // Rust 1.80 and above will cause the position to be set to the end
+            // of the buffer, due to (apparently)
+            // https://github.com/rust-lang/rust/pull/125404. Follow that
+            // behavior.
+            self.set_pos(list, total);
             return Err(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
                 ReadExactError { remaining, buf_len },

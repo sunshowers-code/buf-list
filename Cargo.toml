@@ -8,7 +8,7 @@ keywords = ["buffers", "zero-copy", "io"]
 license = "Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/sunshowers-code/buf-list"
-rust-version = "1.39"
+rust-version = "1.70"
 
 [lints]
 rust.unexpected_cfgs = { level = "warn", check-cfg = ["cfg(doc_cfg)"] }

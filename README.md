@@ -99,8 +99,8 @@ fn into_try_stream<E>(buf_list: BufList) -> impl TryStream<Ok = Bytes, Error = E
 
 ## Minimum supported Rust version
 
-The minimum supported Rust version (MSRV) is **1.39**, same as the `bytes` crate. Optional
-features may cause a bump in the MSRV.
+The minimum supported Rust version (MSRV) is **1.70**. Optional features may
+cause a bump in the MSRV.
 
 The MSRV is not expected to change in the future. If the MSRV changes, it will be accompanied by
 a major version bump to `buf-list`.

@@ -57,14 +57,13 @@ jobs:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.rust-version.version }}
+          toolchain: ${{ matrix.rust-version }}
           components: rustfmt, clippy
       - uses: taiki-e/install-action@cargo-hack
       - uses: Swatinem/rust-cache@v2
       - name: Build
         run: |
-          cargo hack build --feature-powerset \
-            --exclude-features "${{ matrix.rust-version.build-features-excluded }}"
+          cargo hack build --feature-powerset
       - name: Test
         # Dev dependencies have an MSRV > 1.70.
         if: ${{ matrix.rust-version.version == 'stable' }}
