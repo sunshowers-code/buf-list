@@ -217,17 +217,12 @@ impl Buf for BufList {
             return 0;
         }
 
-        // Loop over the buffers in the replay buffer list, and try to fill as
-        // many iovecs as we can from each buffer.
-        let mut filled = 0;
-        for buf in &self.bufs {
-            filled += buf.chunks_vectored(&mut iovs[filled..]);
-            if filled == iovs.len() {
-                return filled;
-            }
+        let to_fill = (iovs.len()).min(self.bufs.len());
+        for (i, iov) in iovs.iter_mut().enumerate().take(to_fill) {
+            *iov = IoSlice::new(&self.bufs[i]);
         }
 
-        filled
+        to_fill
     }
 
     fn advance(&mut self, mut amt: usize) {
