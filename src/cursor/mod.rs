@@ -9,10 +9,10 @@ mod tests;
 mod tokio_imp;
 
 use crate::{BufList, errors::ReadExactError};
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
 use std::{
     cmp::Ordering,
-    io::{self, IoSliceMut, SeekFrom},
+    io::{self, IoSlice, IoSliceMut, SeekFrom},
 };
 
 /// A `Cursor` wraps an in-memory `BufList` and provides it with a [`Seek`] implementation.
@@ -192,6 +192,58 @@ impl<T: AsRef<BufList>> io::BufRead for Cursor<T> {
 
     fn consume(&mut self, amt: usize) {
         self.data.consume_impl(self.inner.as_ref(), amt);
+    }
+}
+
+impl<T: AsRef<BufList>> Buf for Cursor<T> {
+    fn remaining(&self) -> usize {
+        let total = self.data.num_bytes(self.inner.as_ref());
+        total.saturating_sub(self.data.pos) as usize
+    }
+
+    fn chunk(&self) -> &[u8] {
+        self.data.fill_buf_impl(self.inner.as_ref())
+    }
+
+    fn advance(&mut self, amt: usize) {
+        self.data.consume_impl(self.inner.as_ref(), amt);
+    }
+
+    fn chunks_vectored<'iovs>(&'iovs self, iovs: &mut [IoSlice<'iovs>]) -> usize {
+        if iovs.is_empty() {
+            return 0;
+        }
+
+        let list = self.inner.as_ref();
+        let mut filled = 0;
+        let mut current_chunk = self.data.chunk;
+        let mut current_pos = self.data.pos;
+
+        // Iterate through chunks starting from the current position
+        while filled < iovs.len() && current_chunk < list.num_chunks() {
+            if let Some(chunk) = list.get_chunk(current_chunk) {
+                let chunk_start_pos = list.get_start_pos()[current_chunk];
+                let offset_in_chunk = (current_pos - chunk_start_pos) as usize;
+
+                if offset_in_chunk < chunk.len() {
+                    let chunk_slice = &chunk.as_ref()[offset_in_chunk..];
+                    iovs[filled] = IoSlice::new(chunk_slice);
+                    filled += 1;
+                }
+
+                current_chunk += 1;
+                // Move to the start of the next chunk
+                if let Some(&next_start_pos) = list.get_start_pos().get(current_chunk) {
+                    current_pos = next_start_pos;
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        filled
     }
 }
 
