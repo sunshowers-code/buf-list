@@ -1,0 +1,89 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="A segmented list of `bytes::Bytes` chunks."><title>buf_list - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-aa0817cf.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="buf_list" data-themes="" data-resource-suffix="" data-rustdoc-version="1.90.0 (1159e78c4 2025-09-14)" data-channel="1.90.0" data-search-js="search-fa3e91e5.js" data-settings-js="settings-5514c975.js" ><script src="../static.files/storage-68b7e25d.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-eebb9057.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../buf_list/index.html">buf_<wbr>list</a><span class="version">1.1.2</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#overview" title="Overview">Overview</a></li><li><a href="#cursors" title="Cursors">Cursors</a></li><li><a href="#examples" title="Examples">Examples</a><ul><li><a href="#converting-to-streams" title="Converting to `Stream`s">Converting to <code>Stream</code>s</a></li></ul></li><li><a href="#optional-features" title="Optional features">Optional features</a></li><li><a href="#minimum-supported-rust-version" title="Minimum supported Rust version">Minimum supported Rust version</a></li></ul><h3><a href="#structs">Crate Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>buf_list</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/buf_list/lib.rs.html#5-127">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A segmented list of <a href="../bytes/bytes/struct.Bytes.html" title="struct bytes::bytes::Bytes"><code>bytes::Bytes</code></a> chunks.</p>
+<h2 id="overview"><a class="doc-anchor" href="#overview">§</a>Overview</h2>
+<p>This crate provides a <a href="struct.BufList.html" title="struct buf_list::BufList"><code>BufList</code></a> type that is a list of <a href="../bytes/bytes/struct.Bytes.html" title="struct bytes::bytes::Bytes"><code>Bytes</code></a> chunks. The
+type implements <a href="../bytes/buf/buf_impl/trait.Buf.html" title="trait bytes::buf::buf_impl::Buf"><code>bytes::Buf</code></a>, so it can be used in any APIs that use <code>Buf</code>.</p>
+<p>The main use case for <a href="struct.BufList.html" title="struct buf_list::BufList"><code>BufList</code></a> is to buffer data received as a stream of chunks without
+having to copy them into a single contiguous chunk of memory. The <a href="struct.BufList.html" title="struct buf_list::BufList"><code>BufList</code></a> can then be passed
+into any APIs that accept <code>Buf</code>.</p>
+<p>If you’ve ever wanted a <code>Vec&lt;Bytes&gt;</code> or a <code>VecDeque&lt;Bytes&gt;</code>, this type is for you.</p>
+<h2 id="cursors"><a class="doc-anchor" href="#cursors">§</a>Cursors</h2>
+<p>This crate also provides <a href="struct.Cursor.html" title="struct buf_list::Cursor"><code>Cursor</code></a>, which is a cursor type around a
+<a href="struct.BufList.html" title="struct buf_list::BufList"><code>BufList</code></a>. Similar to similar to <a href="https://doc.rust-lang.org/1.90.0/std/io/cursor/struct.Cursor.html" title="struct std::io::cursor::Cursor"><code>std::io::Cursor</code></a>, a <a href="struct.Cursor.html" title="struct buf_list::Cursor"><code>Cursor</code></a> around
+a <a href="struct.BufList.html" title="struct buf_list::BufList"><code>BufList</code></a> implements</p>
+<ul>
+<li><a href="https://doc.rust-lang.org/1.90.0/std/io/trait.Seek.html" title="trait std::io::Seek"><code>Seek</code></a>, <a href="https://doc.rust-lang.org/1.90.0/std/io/trait.Read.html" title="trait std::io::Read"><code>Read</code></a>, and <a href="https://doc.rust-lang.org/1.90.0/std/io/trait.BufRead.html" title="trait std::io::BufRead"><code>BufRead</code></a></li>
+<li><a href="../bytes/buf/buf_impl/trait.Buf.html" title="trait bytes::buf::buf_impl::Buf"><code>bytes::Buf</code></a> as well (in other words, both <a href="struct.BufList.html" title="struct buf_list::BufList"><code>BufList</code></a>s and <a href="struct.Cursor.html" title="struct buf_list::Cursor"><code>Cursor</code></a>s over them
+can be passed into any APIs that accept <code>Buf</code>).</li>
+</ul>
+<h2 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h2>
+<p>Gather chunks into a <code>BufList</code>, then write them all out to standard error in one go:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>buf_list::BufList;
+<span class="kw">use </span>tokio::io::AsyncWriteExt;
+
+<span class="kw">let </span><span class="kw-2">mut </span>buf_list = BufList::new();
+buf_list.push_chunk(<span class="kw-2">&amp;</span><span class="string">b"hello "</span>[..]);
+buf_list.push_chunk(<span class="kw-2">&amp;</span><span class="string">b"world"</span>[..]);
+buf_list.push_chunk(<span class="kw-2">&amp;</span><span class="string">b"!"</span>[..]);
+
+<span class="kw">let </span><span class="kw-2">mut </span>stderr = tokio::io::stderr();
+stderr.write_all_buf(<span class="kw-2">&amp;mut </span>buf_list).<span class="kw">await</span><span class="question-mark">?</span>;</code></pre></div>
+<p>Collect a fallible stream of <code>Bytes</code> into a <code>BufList</code>:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>buf_list::BufList;
+<span class="kw">use </span>bytes::Bytes;
+<span class="kw">use </span>futures::TryStreamExt;
+
+<span class="comment">// A common example is a stream of bytes read over HTTP.
+</span><span class="kw">let </span>stream = futures::stream::iter(
+    <span class="macro">vec!</span>[
+        <span class="prelude-val">Ok</span>(Bytes::from_static(<span class="kw-2">&amp;</span><span class="string">b"laputa, "</span>[..])),
+        <span class="prelude-val">Ok</span>(Bytes::from_static(<span class="kw-2">&amp;</span><span class="string">b"castle "</span>[..])),
+        <span class="prelude-val">Ok</span>(Bytes::from_static(<span class="kw-2">&amp;</span><span class="string">b"in the sky"</span>[..]))
+    ],
+);
+
+<span class="kw">let </span>buf_list = stream.try_collect::&lt;BufList&gt;().<span class="kw">await</span><span class="question-mark">?</span>;
+<span class="macro">assert_eq!</span>(buf_list.num_chunks(), <span class="number">3</span>);</code></pre></div>
+<h3 id="converting-to-streams"><a class="doc-anchor" href="#converting-to-streams">§</a>Converting to <code>Stream</code>s</h3>
+<p>A <code>BufList</code> can be converted into a <code>futures::Stream</code>, or a <code>TryStream</code>, of <code>Bytes</code> chunks. Use
+this recipe to do so:</p>
+<p>(This will be exposed as an API on <code>BufList</code> once <code>Stream</code> and/or <code>TryStream</code> become part of
+stable Rust.)</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>buf_list::BufList;
+<span class="kw">use </span>bytes::Bytes;
+<span class="kw">use </span>futures::{Stream, TryStream};
+
+<span class="kw">fn </span>into_stream(buf_list: BufList) -&gt; <span class="kw">impl </span>Stream&lt;Item = Bytes&gt; {
+    futures::stream::iter(buf_list)
+}
+
+<span class="kw">fn </span>into_try_stream&lt;E&gt;(buf_list: BufList) -&gt; <span class="kw">impl </span>TryStream&lt;<span class="prelude-val">Ok </span>= Bytes, Error = E&gt; {
+    futures::stream::iter(buf_list.into_iter().map(<span class="prelude-val">Ok</span>))
+}</code></pre></div>
+<h2 id="optional-features"><a class="doc-anchor" href="#optional-features">§</a>Optional features</h2>
+<ul>
+<li>
+<p><code>tokio1</code>: With this feature enabled, <a href="struct.Cursor.html" title="struct buf_list::Cursor"><code>Cursor</code></a> implements the <code>tokio</code> crate’s
+<a href="../tokio/io/async_seek/trait.AsyncSeek.html" title="trait tokio::io::async_seek::AsyncSeek"><code>AsyncSeek</code></a>, <a href="../tokio/io/async_read/trait.AsyncRead.html" title="trait tokio::io::async_read::AsyncRead"><code>AsyncRead</code></a> and
+<a href="../tokio/io/async_buf_read/trait.AsyncBufRead.html" title="trait tokio::io::async_buf_read::AsyncBufRead"><code>AsyncBufRead</code></a>.</p>
+</li>
+<li>
+<p><code>futures03</code>: With this feature enabled, <a href="struct.Cursor.html" title="struct buf_list::Cursor"><code>Cursor</code></a> implements the <code>futures</code> crate’s
+<a href="../futures_io/if_std/trait.AsyncSeek.html" title="trait futures_io::if_std::AsyncSeek"><code>AsyncSeek</code></a>, <a href="../futures_io/if_std/trait.AsyncRead.html" title="trait futures_io::if_std::AsyncRead"><code>AsyncRead</code></a> and
+<a href="../futures_io/if_std/trait.AsyncBufRead.html" title="trait futures_io::if_std::AsyncBufRead"><code>AsyncBufRead</code></a>.</p>
+<p>Note that supporting <code>futures03</code> means exporting 0.x types as a public interface. <strong>This
+violates the
+<a href="https://rust-lang.github.io/api-guidelines/necessities.html#public-dependencies-of-a-stable-crate-are-stable-c-stable">C-STABLE</a>
+guideline.</strong> However, the maintainer of <code>buf-list</code> considers that acceptable since <code>futures03</code>
+is an optional feature and not critical to <code>buf-list</code>. As newer versions of the <code>futures</code>
+crate are released, <code>buf-list</code> will support their versions of the async traits as well.</p>
+</li>
+</ul>
+<h2 id="minimum-supported-rust-version"><a class="doc-anchor" href="#minimum-supported-rust-version">§</a>Minimum supported Rust version</h2>
+<p>The minimum supported Rust version (MSRV) is <strong>1.70</strong>. Optional features may
+cause a bump in the MSRV.</p>
+<p><code>buf-list</code> has a conservative MSRV policy. MSRV bumps will be sparing, and
+if so, they will be accompanied by a minor version bump.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.BufList.html" title="struct buf_list::BufList">BufList</a></dt><dd>Data composed of a list of <a href="../bytes/bytes/struct.Bytes.html" title="struct bytes::bytes::Bytes"><code>Bytes</code></a> chunks.</dd><dt><a class="struct" href="struct.Cursor.html" title="struct buf_list::Cursor">Cursor</a></dt><dd>A <code>Cursor</code> wraps an in-memory <code>BufList</code> and provides it with a <a href="https://doc.rust-lang.org/1.90.0/std/io/trait.Seek.html" title="trait std::io::Seek"><code>Seek</code></a> implementation.</dd><dt><a class="struct" href="struct.IntoIter.html" title="struct buf_list::IntoIter">Into<wbr>Iter</a></dt><dd>An owned iterator over chunks in a <a href="struct.BufList.html" title="struct buf_list::BufList"><code>BufList</code></a>.</dd><dt><a class="struct" href="struct.Iter.html" title="struct buf_list::Iter">Iter</a></dt><dd>A borrowed iterator over chunks in a <a href="struct.BufList.html" title="struct buf_list::BufList"><code>BufList</code></a>.</dd></dl></section></div></main></body></html>
