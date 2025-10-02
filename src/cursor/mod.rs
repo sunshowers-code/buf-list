@@ -201,6 +201,10 @@ impl<T: AsRef<BufList>> Buf for Cursor<T> {
         total.saturating_sub(self.data.pos) as usize
     }
 
+    fn has_remaining(&self) -> bool {
+        self.data.num_bytes(self.inner.as_ref()) > self.data.pos
+    }
+
     fn chunk(&self) -> &[u8] {
         self.data.fill_buf_impl(self.inner.as_ref())
     }
@@ -210,40 +214,30 @@ impl<T: AsRef<BufList>> Buf for Cursor<T> {
     }
 
     fn chunks_vectored<'iovs>(&'iovs self, iovs: &mut [IoSlice<'iovs>]) -> usize {
-        if iovs.is_empty() {
+        let list = self.inner.as_ref();
+
+        if iovs.is_empty() || !self.has_remaining() {
             return 0;
         }
 
-        let list = self.inner.as_ref();
-        let mut filled = 0;
-        let mut current_chunk = self.data.chunk;
-        let mut current_pos = self.data.pos;
+        let current_chunk = self.data.chunk;
+        let chunk_start_pos = list.get_start_pos()[current_chunk];
+        let offset_in_chunk = (self.data.pos - chunk_start_pos) as usize;
 
-        // Iterate through chunks starting from the current position
-        while filled < iovs.len() && current_chunk < list.num_chunks() {
-            if let Some(chunk) = list.get_chunk(current_chunk) {
-                let chunk_start_pos = list.get_start_pos()[current_chunk];
-                let offset_in_chunk = (current_pos - chunk_start_pos) as usize;
-
-                if offset_in_chunk < chunk.len() {
-                    let chunk_slice = &chunk.as_ref()[offset_in_chunk..];
-                    iovs[filled] = IoSlice::new(chunk_slice);
-                    filled += 1;
-                }
-
-                current_chunk += 1;
-                // Move to the start of the next chunk
-                if let Some(&next_start_pos) = list.get_start_pos().get(current_chunk) {
-                    current_pos = next_start_pos;
-                } else {
-                    break;
-                }
-            } else {
-                break;
-            }
+        iovs[0] = IoSlice::new(
+            &list.get_chunk(current_chunk).expect("chunk is in range")[offset_in_chunk..],
+        );
+        // Fill up the remaining iovs with as many slices as possible.
+        let to_fill = (iovs.len()).min(list.num_chunks() - current_chunk);
+        for (i, iov) in iovs.iter_mut().enumerate().take(to_fill).skip(1) {
+            *iov = IoSlice::new(
+                &list
+                    .get_chunk(current_chunk + i)
+                    .expect("chunk is in range")[..],
+            );
         }
 
-        filled
+        to_fill
     }
 }
 
