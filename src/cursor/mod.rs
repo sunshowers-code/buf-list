@@ -231,9 +231,8 @@ impl<T: AsRef<BufList>> Buf for Cursor<T> {
         let to_fill = (iovs.len()).min(list.num_chunks() - current_chunk);
         for (i, iov) in iovs.iter_mut().enumerate().take(to_fill).skip(1) {
             *iov = IoSlice::new(
-                &list
-                    .get_chunk(current_chunk + i)
-                    .expect("chunk is in range")[..],
+                list.get_chunk(current_chunk + i)
+                    .expect("chunk is in range"),
             );
         }
 
