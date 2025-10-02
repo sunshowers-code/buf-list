@@ -57,7 +57,6 @@ enum CursorOp {
     // return value separately.
     Consume(prop::sample::Index),
     // Buf trait operations
-    BufRemaining,
     BufChunk,
     BufAdvance(prop::sample::Index),
     BufChunksVectored(prop::sample::Index),
@@ -192,18 +191,6 @@ impl CursorOp {
                 buf_list.consume(amt);
                 oracle.consume(amt);
             }
-            Self::BufRemaining => {
-                eprintln!("buf_remaining");
-
-                let buf_list_remaining = buf_list.remaining();
-                let oracle_remaining = oracle.remaining();
-                ensure!(
-                    buf_list_remaining == oracle_remaining,
-                    "remaining didn't match: buf_list {} == oracle {}",
-                    buf_list_remaining,
-                    oracle_remaining
-                );
-            }
             Self::BufChunk => {
                 eprintln!("buf_chunk");
 
@@ -297,7 +284,8 @@ impl CursorOp {
                     ensure!(
                         !buf_list_bytes.is_empty(),
                         "chunks_vectored should return some data \
-                         when remaining > 0 and num_iovs > 0"
+                         when remaining = {buf_list_remaining} > 0 \
+                         and num_iovs = {num_iovs} > 0"
                     );
                     ensure!(
                         !oracle_bytes.is_empty(),
@@ -312,6 +300,14 @@ impl CursorOp {
                         "buf_list chunks_vectored data should match beginning \
                          of oracle data"
                     );
+
+                    // Verify that all iovs up to buf_list_filled are non-empty.
+                    for (i, iov) in buf_list_iovs[..buf_list_filled].iter().enumerate() {
+                        ensure!(
+                            !iov.is_empty(),
+                            "buf_list iov at index {i} should be non-empty",
+                        );
+                    }
                 } else if buf_list_remaining == 0 {
                     // If no bytes remaining, should return no data
                     ensure!(
@@ -448,6 +444,25 @@ impl CursorOp {
                 oracle = oracle_pinned.get_mut();
             }
         }
+
+        // Check general properties: remaining and has_remaining are the same.
+        let buf_list_remaining = buf_list.remaining();
+        let oracle_remaining = oracle.remaining();
+        ensure!(
+            buf_list_remaining == oracle_remaining,
+            "remaining didn't match: buf_list {} == oracle {}",
+            buf_list_remaining,
+            oracle_remaining
+        );
+
+        let buf_list_has_remaining = buf_list.has_remaining();
+        let oracle_has_remaining = oracle.has_remaining();
+        ensure!(
+            buf_list_has_remaining == oracle_has_remaining,
+            "has_remaining didn't match: buf_list {} == oracle {}",
+            buf_list_has_remaining,
+            oracle_has_remaining
+        );
 
         // Also check that the position is the same.
         let buf_list_position = buf_list.position();
