@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.1.1] - 2025-10-01
+
+### Added
+
+`bytes::Buf` implementations for `Cursor<BufList>` and `Cursor<&BufList>`, to go with the existing `bytes::Buf` implementation for `BufList` itself. This way, the same `BufList` can have multiple cursors over it that all use the `bytes::Buf` implementation.
+
 ## [1.1.0] - 2025-09-29
 
 ### Changed
@@ -68,6 +74,7 @@ This project adheres to [Semantic Versioning](https://semver.org).
 
 - Initial release.
 
+[1.1.1]: https://github.com/sunshowers-code/buf-list/releases/tag/1.1.1
 [1.1.0]: https://github.com/sunshowers-code/buf-list/releases/tag/1.1.0
 [1.0.3]: https://github.com/sunshowers-code/buf-list/releases/tag/1.0.3
 [1.0.2]: https://github.com/sunshowers-code/buf-list/releases/tag/1.0.2

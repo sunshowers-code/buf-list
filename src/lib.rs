@@ -21,9 +21,13 @@
 //!
 //! # Cursors
 //!
-//! This crate also provides [`Cursor`], which is a cursor type around a [`BufList`]. A [`Cursor`]
-//! around a [`BufList`] implements [`Seek`](std::io::Seek), [`Read`](std::io::Read) and
-//! [`BufRead`](std::io::BufRead), similar to [`std::io::Cursor`].
+//! This crate also provides [`Cursor`], which is a cursor type around a
+//! [`BufList`]. Similar to similar to [`std::io::Cursor`], a [`Cursor`] around
+//! a [`BufList`] implements
+//!
+//! * [`Seek`](std::io::Seek), [`Read`](std::io::Read), and [`BufRead`](std::io::BufRead)
+//! * [`bytes::Buf`] as well (in other words, both [`BufList`]s and [`Cursor`]s over them
+//!   can be passed into any APIs that accept `Buf`).
 //!
 //! # Examples
 //!
