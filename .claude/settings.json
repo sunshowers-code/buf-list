@@ -4,7 +4,8 @@
       "Bash(cargo test)",
       "Bash(cargo test:*)",
       "Bash(cargo clippy:*)",
-      "Bash(cargo fix:*)"
+      "Bash(cargo fix:*)",
+      "Bash(cargo check:*)"
     ],
     "deny": [],
     "ask": []

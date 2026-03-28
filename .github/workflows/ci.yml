@@ -16,6 +16,8 @@ jobs:
       RUSTFLAGS: -D warnings
     steps:
       - uses: actions/checkout@v3
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -55,22 +57,26 @@ jobs:
       RUSTFLAGS: -D warnings
     steps:
       - uses: actions/checkout@v3
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust-version }}
           components: rustfmt, clippy
       - uses: taiki-e/install-action@cargo-hack
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
       - uses: Swatinem/rust-cache@v2
       - name: Build
         run: |
           cargo hack build --feature-powerset
       - name: Test
         # Dev dependencies have an MSRV > 1.70.
-        if: ${{ matrix.rust-version.version == 'stable' }}
+        if: ${{ matrix.rust-version == 'stable' }}
         run: cargo hack test --feature-powerset
       - name: Test with updated Cargo.lock
         # Dev dependencies have an MSRV > 1.70.
-        if: ${{ matrix.rust-version.version == 'stable' }}
+        if: ${{ matrix.rust-version == 'stable' }}
         run: |
           cargo update
           cargo hack test --feature-powerset

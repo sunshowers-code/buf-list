@@ -6,26 +6,28 @@
 use crate::BufList;
 use anyhow::{Context, Result, bail, ensure};
 use bytes::{Buf, Bytes};
-use proptest::prelude::*;
+use hegel::generators;
 use std::{
     fmt,
     io::{self, BufRead, IoSliceMut, Read, Seek, SeekFrom},
 };
-use test_strategy::{Arbitrary, proptest};
 
 /// Assert that buf_list's cursor behaves identically to std::io::Cursor.
-#[proptest]
-fn proptest_cursor_ops(
-    #[strategy(buf_list_strategy())] buf_list: BufList,
-    #[strategy(cursor_ops_strategy())] ops: Vec<CursorOp>,
-) {
+#[hegel::test(test_cases = 200)]
+fn hegel_cursor_ops(tc: hegel::TestCase) {
+    let buf_list = tc.draw(buf_lists());
+
+    let num_bytes = buf_list.num_bytes();
     let bytes = buf_list.clone().copy_to_bytes(buf_list.remaining());
     let mut buf_list_cursor = crate::Cursor::new(&buf_list);
     let mut oracle_cursor = io::Cursor::new(bytes.as_ref());
 
-    eprintln!("\n**** start!");
+    let num_ops = tc.draw(generators::integers::<usize>().max_value(255));
 
-    for (index, cursor_op) in ops.into_iter().enumerate() {
+    eprintln!("\n**** start! num_bytes={num_bytes}, num_ops={num_ops}");
+
+    for index in 0..num_ops {
+        let cursor_op = draw_cursor_op(&tc, num_bytes);
         // apply_and_compare prints out the rest of the line.
         eprint!("** index {}, operation {:?}: ", index, cursor_op);
         cursor_op
@@ -36,39 +38,120 @@ fn proptest_cursor_ops(
     eprintln!("**** success");
 }
 
-fn buf_list_strategy() -> impl Strategy<Value = BufList> {
-    prop::collection::vec(prop::collection::vec(any::<u8>(), 1..128), 0..32)
-        .prop_map(|chunks| chunks.into_iter().map(Bytes::from).collect())
+#[hegel::composite]
+fn buf_lists(tc: hegel::TestCase) -> BufList {
+    let chunks: Vec<Vec<u8>> = tc.draw(
+        generators::vecs(
+            generators::vecs(generators::integers::<u8>())
+                .min_size(1)
+                .max_size(127),
+        )
+        .max_size(31),
+    );
+    chunks.into_iter().map(Bytes::from).collect()
 }
 
-#[derive(Arbitrary, Clone, Debug)]
+fn draw_cursor_op(tc: &hegel::TestCase, num_bytes: usize) -> CursorOp {
+    #[cfg(feature = "tokio1")]
+    let max_op: u8 = 15;
+    #[cfg(not(feature = "tokio1"))]
+    let max_op: u8 = 14;
+
+    let op = tc.draw(generators::integers::<u8>().max_value(max_op));
+    match op {
+        0 => {
+            // Allow going past the end of the list a bit.
+            let pos = tc.draw(generators::integers::<usize>().max_value(num_bytes * 5 / 4)) as u64;
+            CursorOp::SetPosition(pos)
+        }
+        1 => {
+            // Allow going past the end of the list a bit.
+            let pos = tc.draw(generators::integers::<usize>().max_value(num_bytes * 5 / 4)) as u64;
+            CursorOp::SeekStart(pos)
+        }
+        2 => {
+            // Allow going past the beginning and end of the list a bit.
+            let raw = tc.draw(generators::integers::<usize>().max_value(num_bytes * 3 / 2));
+            let offset = raw as i64 - (1 + num_bytes * 5 / 4) as i64;
+            CursorOp::SeekEnd(offset)
+        }
+        3 => {
+            let raw = tc.draw(generators::integers::<usize>().max_value(num_bytes * 3 / 2));
+            // Center the index at roughly 0.
+            let offset = raw as i64 - (num_bytes * 3 / 4) as i64;
+            CursorOp::SeekCurrent(offset)
+        }
+        4 => {
+            let buf_size = tc.draw(generators::integers::<usize>().max_value(num_bytes * 5 / 4));
+            CursorOp::Read(buf_size)
+        }
+        5 => {
+            let n_bufs = tc.draw(generators::integers::<usize>().max_value(7));
+            let sizes = (0..n_bufs)
+                .map(|_| tc.draw(generators::integers::<usize>().max_value(num_bytes)))
+                .collect();
+            CursorOp::ReadVectored(sizes)
+        }
+        6 => {
+            let buf_size = tc.draw(generators::integers::<usize>().max_value(num_bytes * 5 / 4));
+            CursorOp::ReadExact(buf_size)
+        }
+        7 => {
+            let amt = tc.draw(generators::integers::<usize>().max_value(num_bytes * 5 / 4));
+            CursorOp::Consume(amt)
+        }
+        8 => CursorOp::BufChunk,
+        9 => {
+            let amt = tc.draw(generators::integers::<usize>().max_value(num_bytes * 5 / 4));
+            CursorOp::BufAdvance(amt)
+        }
+        10 => {
+            let num_iovs = tc.draw(generators::integers::<usize>().max_value(num_bytes));
+            CursorOp::BufChunksVectored(num_iovs)
+        }
+        11 => {
+            let len = tc.draw(generators::integers::<usize>().max_value(num_bytes * 5 / 4));
+            CursorOp::BufCopyToBytes(len)
+        }
+        12 => CursorOp::BufGetU8,
+        13 => CursorOp::BufGetU64,
+        14 => CursorOp::BufGetU64Le,
+        #[cfg(feature = "tokio1")]
+        15 => {
+            let capacity = tc.draw(generators::integers::<usize>().max_value(num_bytes * 5 / 4));
+            // filled is in 0..=capacity, to sometimes fill the whole buffer.
+            let filled = tc.draw(generators::integers::<usize>().max_value(capacity));
+            CursorOp::PollRead { capacity, filled }
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[derive(Clone, Debug)]
 enum CursorOp {
-    SetPosition(prop::sample::Index),
-    SeekStart(prop::sample::Index),
-    SeekEnd(prop::sample::Index),
-    SeekCurrent(prop::sample::Index),
-    Read(prop::sample::Index),
-    ReadVectored(
-        #[strategy(prop::collection::vec(any::<prop::sample::Index>(), 0..8))]
-        Vec<prop::sample::Index>,
-    ),
-    ReadExact(prop::sample::Index),
+    SetPosition(u64),
+    SeekStart(u64),
+    SeekEnd(i64),
+    SeekCurrent(i64),
+    Read(usize),
+    ReadVectored(Vec<usize>),
+    ReadExact(usize),
     // fill_buf can't be tested here because oracle is a contiguous block. Instead, we check its
     // return value separately.
-    Consume(prop::sample::Index),
-    // Buf trait operations
+    Consume(usize),
+    // Buf trait operations.
     BufChunk,
-    BufAdvance(prop::sample::Index),
-    BufChunksVectored(prop::sample::Index),
-    BufCopyToBytes(prop::sample::Index),
+    BufAdvance(usize),
+    BufChunksVectored(usize),
+    BufCopyToBytes(usize),
     BufGetU8,
     BufGetU64,
     BufGetU64Le,
     // No need to test futures03 imps since they're simple wrappers around the main imps.
     #[cfg(feature = "tokio1")]
     PollRead {
-        capacity: prop::sample::Index,
-        filled: prop::sample::Index,
+        capacity: usize,
+        filled: usize,
     },
 }
 
@@ -81,17 +164,14 @@ impl CursorOp {
     ) -> Result<()> {
         let num_bytes = buf_list.get_ref().num_bytes();
         match self {
-            Self::SetPosition(index) => {
-                // Allow going past the end of the list a bit.
-                let index = index.index(1 + num_bytes * 5 / 4) as u64;
-                eprintln!("set position: {}", index);
+            Self::SetPosition(pos) => {
+                eprintln!("set position: {}", pos);
 
-                buf_list.set_position(index);
-                oracle.set_position(index);
+                buf_list.set_position(pos);
+                oracle.set_position(pos);
             }
-            Self::SeekStart(index) => {
-                // Allow going past the end of the list a bit.
-                let style = SeekFrom::Start(index.index(1 + num_bytes * 5 / 4) as u64);
+            Self::SeekStart(pos) => {
+                let style = SeekFrom::Start(pos);
                 eprintln!("style: {:?}", style);
 
                 let buf_list_res = buf_list.seek(style);
@@ -99,10 +179,8 @@ impl CursorOp {
                 Self::assert_io_result_eq(buf_list_res, oracle_res)
                     .context("operation result didn't match")?;
             }
-            Self::SeekEnd(index) => {
-                // Allow going past the beginning and end of the list a bit.
-                let index = index.index(1 + num_bytes * 3 / 2) as i64;
-                let style = SeekFrom::End(index - (1 + num_bytes * 5 / 4) as i64);
+            Self::SeekEnd(offset) => {
+                let style = SeekFrom::End(offset);
                 eprintln!("style: {:?}", style);
 
                 let buf_list_res = buf_list.seek(style);
@@ -110,10 +188,8 @@ impl CursorOp {
                 Self::assert_io_result_eq(buf_list_res, oracle_res)
                     .context("operation result didn't match")?;
             }
-            Self::SeekCurrent(index) => {
-                let index = index.index(1 + num_bytes * 3 / 2) as i64;
-                // Center the index at roughly 0.
-                let style = SeekFrom::Current(index - (num_bytes * 3 / 4) as i64);
+            Self::SeekCurrent(offset) => {
+                let style = SeekFrom::Current(offset);
                 eprintln!("style: {:?}", style);
 
                 let buf_list_res = buf_list.seek(style);
@@ -121,8 +197,7 @@ impl CursorOp {
                 Self::assert_io_result_eq(buf_list_res, oracle_res)
                     .context("operation result didn't match")?;
             }
-            Self::Read(index) => {
-                let buf_size = index.index(1 + num_bytes * 5 / 4);
+            Self::Read(buf_size) => {
                 eprintln!("buf_size: {}", buf_size);
 
                 // Must initialize the whole vec here so &mut returns the whole buffer -- can't use
@@ -136,15 +211,14 @@ impl CursorOp {
                     .context("operation result didn't match")?;
                 ensure!(buf_list_buf == oracle_buf, "read buffer matches");
             }
-            Self::ReadVectored(indexes) => {
+            Self::ReadVectored(sizes) => {
                 // Build a bunch of IoSliceMuts.
-                let mut buf_list_vecs: Vec<_> = indexes
+                let mut buf_list_vecs: Vec<_> = sizes
                     .into_iter()
-                    .map(|index| {
-                        // Must initialize the whole vec here so &mut returns the whole buffer -- can't
-                        // use with_capacity!
-                        let buf_size = index.index(1 + num_bytes);
-                        vec![0u8; buf_size]
+                    .map(|size| {
+                        // Must initialize the whole vec here so &mut returns the whole buffer --
+                        // can't use with_capacity!
+                        vec![0u8; size]
                     })
                     .collect();
                 let mut oracle_vecs = buf_list_vecs.clone();
@@ -169,8 +243,7 @@ impl CursorOp {
                     oracle_vecs
                 );
             }
-            Self::ReadExact(index) => {
-                let buf_size = index.index(1 + num_bytes * 5 / 4);
+            Self::ReadExact(buf_size) => {
                 eprintln!("buf_size: {}", buf_size);
 
                 // Must initialize the whole vec here so &mut returns the whole buffer -- can't use
@@ -184,8 +257,7 @@ impl CursorOp {
                     .context("operation result didn't match")?;
                 ensure!(buf_list_buf == oracle_buf, "read buffer matches");
             }
-            Self::Consume(index) => {
-                let amt = index.index(1 + num_bytes * 5 / 4);
+            Self::Consume(amt) => {
                 eprintln!("amt: {}", amt);
 
                 buf_list.consume(amt);
@@ -211,19 +283,18 @@ impl CursorOp {
                 );
 
                 if !buf_list_chunk.is_empty() {
-                    // Verify buf_list's chunk is a prefix of oracle's chunk
+                    // Verify buf_list's chunk is a prefix of oracle's chunk.
                     ensure!(
                         oracle_chunk.starts_with(buf_list_chunk),
                         "buf_list chunk is not a prefix of oracle chunk"
                     );
                 }
             }
-            Self::BufAdvance(index) => {
-                let amt = index.index(1 + num_bytes * 5 / 4);
+            Self::BufAdvance(amt) => {
                 eprintln!("buf_advance: {}", amt);
 
                 // Skip if already past the end, as the oracle's Buf impl has a debug assertion
-                // that checks position even when advancing by 0
+                // that checks position even when advancing by 0.
                 if buf_list.remaining() > 0 || amt == 0 && oracle.remaining() > 0 {
                     // Cap the advance amount to the remaining bytes to avoid
                     // hitting the debug assertion in std::io::Cursor's Buf
@@ -237,11 +308,10 @@ impl CursorOp {
                     eprintln!("  skipping: cursor past end");
                 }
             }
-            Self::BufChunksVectored(index) => {
-                let num_iovs = index.index(1 + num_bytes);
+            Self::BufChunksVectored(num_iovs) => {
                 eprintln!("buf_chunks_vectored: {} iovs", num_iovs);
 
-                // First verify remaining() matches
+                // First verify remaining() matches.
                 let buf_list_remaining = buf_list.remaining();
                 let oracle_remaining = oracle.remaining();
                 ensure!(
@@ -266,9 +336,9 @@ impl CursorOp {
                 //
                 // Instead, we verify that:
                 // 1. Both returned at least some data if there are bytes
-                //    remaining
+                //    remaining.
                 // 2. The data that was returned matches (buf_list's data is a
-                //    prefix of oracle's data)
+                //    prefix of oracle's data).
                 let buf_list_bytes: Vec<u8> = buf_list_iovs[..buf_list_filled]
                     .iter()
                     .flat_map(|iov| iov.as_ref().iter().copied())
@@ -309,7 +379,7 @@ impl CursorOp {
                         );
                     }
                 } else if buf_list_remaining == 0 {
-                    // If no bytes remaining, should return no data
+                    // If no bytes remaining, should return no data.
                     ensure!(
                         buf_list_bytes.is_empty() && oracle_bytes.is_empty(),
                         "chunks_vectored should return no data when \
@@ -320,11 +390,10 @@ impl CursorOp {
                 // provided. All we're doing is ensuring that buf_list doesn't
                 // panic.
             }
-            Self::BufCopyToBytes(index) => {
-                let len = index.index(1 + num_bytes * 5 / 4);
+            Self::BufCopyToBytes(len) => {
                 eprintln!("buf_copy_to_bytes: {}", len);
 
-                // copy_to_bytes can panic if len > remaining, so check first
+                // copy_to_bytes can panic if len > remaining, so check first.
                 let buf_list_remaining = buf_list.remaining();
                 let oracle_remaining = oracle.remaining();
 
@@ -334,7 +403,7 @@ impl CursorOp {
 
                     ensure!(buf_list_bytes == oracle_bytes, "copy_to_bytes didn't match");
                 } else {
-                    // Both should panic, so just skip this operation
+                    // Both should panic, so skip this operation.
                     eprintln!("  skipping: len {} > remaining {}", len, buf_list_remaining);
                 }
             }
@@ -391,22 +460,18 @@ impl CursorOp {
                 use std::{mem::MaybeUninit, pin::Pin, task::Poll};
                 use tokio::io::{AsyncRead, ReadBuf};
 
-                let capacity = capacity.index(1 + num_bytes * 5 / 4);
                 let mut buf_list_vec = vec![MaybeUninit::uninit(); capacity];
                 let mut oracle_vec = buf_list_vec.clone();
 
                 let mut buf_list_buf = ReadBuf::uninit(&mut buf_list_vec);
 
-                // Fill up the first bytes of the vector. This uses capacity + 1 so that we can
-                // sometimes fill up the whole buffer.
-                let filled_index = filled.index(capacity + 1);
-                let fill_vec = vec![0u8; filled_index];
+                let fill_vec = vec![0u8; filled];
                 buf_list_buf.put_slice(&fill_vec);
 
                 let mut oracle_buf = ReadBuf::uninit(&mut oracle_vec);
                 oracle_buf.put_slice(&fill_vec);
 
-                eprintln!("capacity: {}, filled_index: {}", capacity, filled_index);
+                eprintln!("capacity: {}, filled: {}", capacity, filled);
 
                 let waker = dummy_waker::dummy_waker();
                 let mut context = std::task::Context::from_waker(&waker);
@@ -539,10 +604,6 @@ impl CursorOp {
 
         Ok(())
     }
-}
-
-fn cursor_ops_strategy() -> impl Strategy<Value = Vec<CursorOp>> {
-    prop::collection::vec(any::<CursorOp>(), 0..256)
 }
 
 #[test]
