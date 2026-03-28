@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - name: Update Cargo.lock
         run: cargo update
