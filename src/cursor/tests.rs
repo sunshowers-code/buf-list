@@ -3,10 +3,16 @@
 
 // Property-based tests for Cursor.
 
+// The DefaultGenerator derive generates PascalCase variable names for enum variants.
+#![expect(non_snake_case)]
+
 use crate::BufList;
 use anyhow::{Context, Result, bail, ensure};
 use bytes::{Buf, Bytes};
-use hegel::{DefaultGenerator, generators};
+// Import the Generator and DefaultGenerator *traits* (distinct from the DefaultGenerator derive
+// macro imported above) so that .map() and .default_generator() are available.
+use hegel::generators::DefaultGenerator as _;
+use hegel::{DefaultGenerator, Generator, generators};
 use std::{
     fmt,
     io::{self, BufRead, IoSliceMut, Read, Seek, SeekFrom},
@@ -51,102 +57,7 @@ fn buf_lists(tc: hegel::TestCase) -> BufList {
     chunks.into_iter().map(Bytes::from).collect()
 }
 
-/// Unit enum for variant selection.
-///
-/// The derived DefaultGenerator picks a variant uniformly at random, without
-/// generating any field data.
 #[derive(Clone, Debug, DefaultGenerator)]
-enum CursorOpKind {
-    SetPosition,
-    SeekStart,
-    SeekEnd,
-    SeekCurrent,
-    Read,
-    ReadVectored,
-    ReadExact,
-    Consume,
-    BufChunk,
-    BufAdvance,
-    BufChunksVectored,
-    BufCopyToBytes,
-    BufGetU8,
-    BufGetU64,
-    BufGetU64Le,
-    #[cfg(feature = "tokio1")]
-    PollRead,
-}
-
-#[hegel::composite]
-fn cursor_ops(tc: hegel::TestCase, num_bytes: usize) -> CursorOp {
-    match tc.draw(generators::default::<CursorOpKind>()) {
-        CursorOpKind::SetPosition => {
-            // Allow going past the end of the list a bit.
-            let pos = tc.draw(generators::integers::<usize>().max_value(num_bytes * 5 / 4)) as u64;
-            CursorOp::SetPosition(pos)
-        }
-        CursorOpKind::SeekStart => {
-            // Allow going past the end of the list a bit.
-            let pos = tc.draw(generators::integers::<usize>().max_value(num_bytes * 5 / 4)) as u64;
-            CursorOp::SeekStart(pos)
-        }
-        CursorOpKind::SeekEnd => {
-            // Allow going past the beginning and end of the list a bit.
-            let raw = tc.draw(generators::integers::<usize>().max_value(num_bytes * 3 / 2));
-            let offset = raw as i64 - (1 + num_bytes * 5 / 4) as i64;
-            CursorOp::SeekEnd(offset)
-        }
-        CursorOpKind::SeekCurrent => {
-            let raw = tc.draw(generators::integers::<usize>().max_value(num_bytes * 3 / 2));
-            // Center the index at roughly 0.
-            let offset = raw as i64 - (num_bytes * 3 / 4) as i64;
-            CursorOp::SeekCurrent(offset)
-        }
-        CursorOpKind::Read => {
-            let buf_size = tc.draw(generators::integers::<usize>().max_value(num_bytes * 5 / 4));
-            CursorOp::Read(buf_size)
-        }
-        CursorOpKind::ReadVectored => {
-            let n_bufs = tc.draw(generators::integers::<usize>().max_value(7));
-            let sizes = (0..n_bufs)
-                .map(|_| tc.draw(generators::integers::<usize>().max_value(num_bytes)))
-                .collect();
-            CursorOp::ReadVectored(sizes)
-        }
-        CursorOpKind::ReadExact => {
-            let buf_size = tc.draw(generators::integers::<usize>().max_value(num_bytes * 5 / 4));
-            CursorOp::ReadExact(buf_size)
-        }
-        CursorOpKind::Consume => {
-            let amt = tc.draw(generators::integers::<usize>().max_value(num_bytes * 5 / 4));
-            CursorOp::Consume(amt)
-        }
-        CursorOpKind::BufChunk => CursorOp::BufChunk,
-        CursorOpKind::BufAdvance => {
-            let amt = tc.draw(generators::integers::<usize>().max_value(num_bytes * 5 / 4));
-            CursorOp::BufAdvance(amt)
-        }
-        CursorOpKind::BufChunksVectored => {
-            let num_iovs = tc.draw(generators::integers::<usize>().max_value(num_bytes));
-            CursorOp::BufChunksVectored(num_iovs)
-        }
-        CursorOpKind::BufCopyToBytes => {
-            let len = tc.draw(generators::integers::<usize>().max_value(num_bytes * 5 / 4));
-            CursorOp::BufCopyToBytes(len)
-        }
-        CursorOpKind::BufGetU8 => CursorOp::BufGetU8,
-        CursorOpKind::BufGetU64 => CursorOp::BufGetU64,
-        CursorOpKind::BufGetU64Le => CursorOp::BufGetU64Le,
-        #[cfg(feature = "tokio1")]
-        CursorOpKind::PollRead => {
-            let capacity = tc.draw(generators::integers::<usize>().max_value(num_bytes * 5 / 4));
-            // filled is in 0..=capacity, to sometimes fill the whole buffer.
-            let filled = tc.draw(generators::integers::<usize>().max_value(capacity));
-            CursorOp::PollRead { capacity, filled }
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
 enum CursorOp {
     SetPosition(u64),
     SeekStart(u64),
@@ -172,6 +83,97 @@ enum CursorOp {
         capacity: usize,
         filled: usize,
     },
+}
+
+/// Build a CursorOp generator with field constraints that depend on the
+/// BufList's size.
+///
+/// Uses `#[derive(DefaultGenerator)]` on `CursorOp` for variant selection,
+/// with per-variant field generators configured inline. This removes the need
+/// for a separate discriminant enum.
+fn cursor_ops(num_bytes: usize) -> impl Generator<CursorOp> {
+    // `d` provides access to default_*() methods for building per-variant generators.
+    let d = CursorOp::default_generator();
+
+    let gen = CursorOp::default_generator()
+        .SetPosition(
+            d.default_SetPosition()
+                // Allow going past the end of the list a bit.
+                .value(
+                    generators::integers::<usize>()
+                        .max_value(num_bytes * 5 / 4)
+                        .map(|v| v as u64),
+                ),
+        )
+        .SeekStart(
+            d.default_SeekStart()
+                // Allow going past the end of the list a bit.
+                .value(
+                    generators::integers::<usize>()
+                        .max_value(num_bytes * 5 / 4)
+                        .map(|v| v as u64),
+                ),
+        )
+        .SeekEnd(
+            d.default_SeekEnd()
+                // Allow going past the beginning and end of the list a bit.
+                .value(
+                    generators::integers::<usize>()
+                        .max_value(num_bytes * 3 / 2)
+                        .map(move |raw| raw as i64 - (1 + num_bytes * 5 / 4) as i64),
+                ),
+        )
+        .SeekCurrent(
+            d.default_SeekCurrent()
+                // Center the index at roughly 0.
+                .value(
+                    generators::integers::<usize>()
+                        .max_value(num_bytes * 3 / 2)
+                        .map(move |raw| raw as i64 - (num_bytes * 3 / 4) as i64),
+                ),
+        )
+        .Read(
+            d.default_Read()
+                .value(generators::integers::<usize>().max_value(num_bytes * 5 / 4)),
+        )
+        .ReadVectored(d.default_ReadVectored().value(
+            generators::vecs(generators::integers::<usize>().max_value(num_bytes)).max_size(7),
+        ))
+        .ReadExact(
+            d.default_ReadExact()
+                .value(generators::integers::<usize>().max_value(num_bytes * 5 / 4)),
+        )
+        .Consume(
+            d.default_Consume()
+                .value(generators::integers::<usize>().max_value(num_bytes * 5 / 4)),
+        )
+        .BufAdvance(
+            d.default_BufAdvance()
+                .value(generators::integers::<usize>().max_value(num_bytes * 5 / 4)),
+        )
+        .BufChunksVectored(
+            d.default_BufChunksVectored()
+                .value(generators::integers::<usize>().max_value(num_bytes)),
+        )
+        .BufCopyToBytes(
+            d.default_BufCopyToBytes()
+                .value(generators::integers::<usize>().max_value(num_bytes * 5 / 4)),
+        );
+
+    #[cfg(feature = "tokio1")]
+    let gen = gen.PollRead(poll_read_op(num_bytes));
+
+    gen
+}
+
+/// Generates `CursorOp::PollRead` with the constraint that `filled <= capacity`.
+#[cfg(feature = "tokio1")]
+#[hegel::composite]
+fn poll_read_op(tc: hegel::TestCase, num_bytes: usize) -> CursorOp {
+    let capacity = tc.draw(generators::integers::<usize>().max_value(num_bytes * 5 / 4));
+    // filled is in 0..=capacity, to sometimes fill the whole buffer.
+    let filled = tc.draw(generators::integers::<usize>().max_value(capacity));
+    CursorOp::PollRead { capacity, filled }
 }
 
 impl CursorOp {
