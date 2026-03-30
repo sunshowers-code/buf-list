@@ -1,48 +1,16 @@
 // Copyright (c) The buf-list Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-// Property-based tests for Cursor.
-
-// The DefaultGenerator derive generates PascalCase variable names for enum variants.
-#![expect(non_snake_case)]
+// Stateful property-based tests for Cursor.
 
 use crate::BufList;
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Result, bail, ensure};
 use bytes::{Buf, Bytes};
-// Import the Generator and DefaultGenerator *traits* (distinct from the DefaultGenerator derive
-// macro imported above) so that .map() and .default_generator() are available.
-use hegel::generators::DefaultGenerator as _;
-use hegel::{DefaultGenerator, Generator, generators};
+use hegel::generators;
 use std::{
     fmt,
     io::{self, BufRead, IoSliceMut, Read, Seek, SeekFrom},
 };
-
-/// Assert that buf_list's cursor behaves identically to std::io::Cursor.
-#[hegel::test(test_cases = 200)]
-fn hegel_cursor_ops(tc: hegel::TestCase) {
-    let buf_list = tc.draw(buf_lists());
-
-    let num_bytes = buf_list.num_bytes();
-    let bytes = buf_list.clone().copy_to_bytes(buf_list.remaining());
-    let mut buf_list_cursor = crate::Cursor::new(&buf_list);
-    let mut oracle_cursor = io::Cursor::new(bytes.as_ref());
-
-    let num_ops = tc.draw(generators::integers::<usize>().max_value(255));
-
-    eprintln!("\n**** start! num_bytes={num_bytes}, num_ops={num_ops}");
-
-    for index in 0..num_ops {
-        let cursor_op = tc.draw(cursor_ops(num_bytes));
-        // apply_and_compare prints out the rest of the line.
-        eprint!("** index {}, operation {:?}: ", index, cursor_op);
-        cursor_op
-            .apply_and_compare(&mut buf_list_cursor, &mut oracle_cursor)
-            .with_context(|| format!("for index {}", index))
-            .unwrap();
-    }
-    eprintln!("**** success");
-}
 
 #[hegel::composite]
 fn buf_lists(tc: hegel::TestCase) -> BufList {
@@ -57,574 +25,403 @@ fn buf_lists(tc: hegel::TestCase) -> BufList {
     chunks.into_iter().map(Bytes::from).collect()
 }
 
-#[derive(Clone, Debug, DefaultGenerator)]
-enum CursorOp {
-    SetPosition(u64),
-    SeekStart(u64),
-    SeekEnd(i64),
-    SeekCurrent(i64),
-    Read(usize),
-    ReadVectored(Vec<usize>),
-    ReadExact(usize),
-    // fill_buf can't be tested here because oracle is a contiguous block. Instead, we check its
-    // return value separately.
-    Consume(usize),
-    // Buf trait operations.
-    BufChunk,
-    BufAdvance(usize),
-    BufChunksVectored(usize),
-    BufCopyToBytes(usize),
-    BufGetU8,
-    BufGetU64,
-    BufGetU64Le,
-    // No need to test futures03 imps since they're simple wrappers around the main imps.
-    #[cfg(feature = "tokio1")]
-    PollRead {
-        capacity: usize,
-        filled: usize,
-    },
-}
-
-/// Build a CursorOp generator with field constraints that depend on the
-/// BufList's size.
-///
-/// Uses `#[derive(DefaultGenerator)]` on `CursorOp` for variant selection,
-/// with per-variant field generators configured inline. This removes the need
-/// for a separate discriminant enum.
-fn cursor_ops(num_bytes: usize) -> impl Generator<CursorOp> {
-    // `d` provides access to default_*() methods for building per-variant generators.
-    let d = CursorOp::default_generator();
-
-    let gen = CursorOp::default_generator()
-        .SetPosition(
-            d.default_SetPosition()
-                // Allow going past the end of the list a bit.
-                .value(
-                    generators::integers::<usize>()
-                        .max_value(num_bytes * 5 / 4)
-                        .map(|v| v as u64),
-                ),
-        )
-        .SeekStart(
-            d.default_SeekStart()
-                // Allow going past the end of the list a bit.
-                .value(
-                    generators::integers::<usize>()
-                        .max_value(num_bytes * 5 / 4)
-                        .map(|v| v as u64),
-                ),
-        )
-        .SeekEnd(
-            d.default_SeekEnd()
-                // Allow going past the beginning and end of the list a bit.
-                .value(
-                    generators::integers::<usize>()
-                        .max_value(num_bytes * 3 / 2)
-                        .map(move |raw| raw as i64 - (1 + num_bytes * 5 / 4) as i64),
-                ),
-        )
-        .SeekCurrent(
-            d.default_SeekCurrent()
-                // Center the index at roughly 0.
-                .value(
-                    generators::integers::<usize>()
-                        .max_value(num_bytes * 3 / 2)
-                        .map(move |raw| raw as i64 - (num_bytes * 3 / 4) as i64),
-                ),
-        )
-        .Read(
-            d.default_Read()
-                .value(generators::integers::<usize>().max_value(num_bytes * 5 / 4)),
-        )
-        .ReadVectored(d.default_ReadVectored().value(
-            generators::vecs(generators::integers::<usize>().max_value(num_bytes)).max_size(7),
-        ))
-        .ReadExact(
-            d.default_ReadExact()
-                .value(generators::integers::<usize>().max_value(num_bytes * 5 / 4)),
-        )
-        .Consume(
-            d.default_Consume()
-                .value(generators::integers::<usize>().max_value(num_bytes * 5 / 4)),
-        )
-        .BufAdvance(
-            d.default_BufAdvance()
-                .value(generators::integers::<usize>().max_value(num_bytes * 5 / 4)),
-        )
-        .BufChunksVectored(
-            d.default_BufChunksVectored()
-                .value(generators::integers::<usize>().max_value(num_bytes)),
-        )
-        .BufCopyToBytes(
-            d.default_BufCopyToBytes()
-                .value(generators::integers::<usize>().max_value(num_bytes * 5 / 4)),
-        );
-
-    #[cfg(feature = "tokio1")]
-    let gen = gen.PollRead(poll_read_op(num_bytes));
-
-    gen
-}
-
-/// Generates `CursorOp::PollRead` with the constraint that `filled <= capacity`.
-#[cfg(feature = "tokio1")]
-#[hegel::composite]
-fn poll_read_op(tc: hegel::TestCase, num_bytes: usize) -> CursorOp {
-    let capacity = tc.draw(generators::integers::<usize>().max_value(num_bytes * 5 / 4));
-    // filled is in 0..=capacity, to sometimes fill the whole buffer.
-    let filled = tc.draw(generators::integers::<usize>().max_value(capacity));
-    CursorOp::PollRead { capacity, filled }
-}
-
-impl CursorOp {
-    fn apply_and_compare(
-        self,
-        // The "mut" here is used in the branches corresponding to optional features.
-        #[allow(unused_mut)] mut buf_list: &mut crate::Cursor<&BufList>,
-        #[allow(unused_mut)] mut oracle: &mut io::Cursor<&[u8]>,
-    ) -> Result<()> {
-        let num_bytes = buf_list.get_ref().num_bytes();
-        match self {
-            Self::SetPosition(pos) => {
-                eprintln!("set position: {}", pos);
-
-                buf_list.set_position(pos);
-                oracle.set_position(pos);
-            }
-            Self::SeekStart(pos) => {
-                let style = SeekFrom::Start(pos);
-                eprintln!("style: {:?}", style);
-
-                let buf_list_res = buf_list.seek(style);
-                let oracle_res = oracle.seek(style);
-                Self::assert_io_result_eq(buf_list_res, oracle_res)
-                    .context("operation result didn't match")?;
-            }
-            Self::SeekEnd(offset) => {
-                let style = SeekFrom::End(offset);
-                eprintln!("style: {:?}", style);
-
-                let buf_list_res = buf_list.seek(style);
-                let oracle_res = oracle.seek(style);
-                Self::assert_io_result_eq(buf_list_res, oracle_res)
-                    .context("operation result didn't match")?;
-            }
-            Self::SeekCurrent(offset) => {
-                let style = SeekFrom::Current(offset);
-                eprintln!("style: {:?}", style);
-
-                let buf_list_res = buf_list.seek(style);
-                let oracle_res = oracle.seek(style);
-                Self::assert_io_result_eq(buf_list_res, oracle_res)
-                    .context("operation result didn't match")?;
-            }
-            Self::Read(buf_size) => {
-                eprintln!("buf_size: {}", buf_size);
-
-                // Must initialize the whole vec here so &mut returns the whole buffer -- can't use
-                // with_capacity!
-                let mut buf_list_buf = vec![0u8; buf_size];
-                let mut oracle_buf = vec![0u8; buf_size];
-
-                let buf_list_res = buf_list.read(&mut buf_list_buf);
-                let oracle_res = oracle.read(&mut oracle_buf);
-                Self::assert_io_result_eq(buf_list_res, oracle_res)
-                    .context("operation result didn't match")?;
-                ensure!(buf_list_buf == oracle_buf, "read buffer matches");
-            }
-            Self::ReadVectored(sizes) => {
-                // Build a bunch of IoSliceMuts.
-                let mut buf_list_vecs: Vec<_> = sizes
-                    .into_iter()
-                    .map(|size| {
-                        // Must initialize the whole vec here so &mut returns the whole buffer --
-                        // can't use with_capacity!
-                        vec![0u8; size]
-                    })
-                    .collect();
-                let mut oracle_vecs = buf_list_vecs.clone();
-
-                let mut buf_list_slices: Vec<_> = buf_list_vecs
-                    .iter_mut()
-                    .map(|v| IoSliceMut::new(v))
-                    .collect();
-                let mut oracle_slices: Vec<_> =
-                    oracle_vecs.iter_mut().map(|v| IoSliceMut::new(v)).collect();
-
-                let buf_list_res = buf_list.read_vectored(&mut buf_list_slices);
-                let oracle_res = oracle.read_vectored(&mut oracle_slices);
-                Self::assert_io_result_eq(buf_list_res, oracle_res)
-                    .context("operation result didn't match")?;
-
-                // Also check that the slices read match exactly.
-                ensure!(
-                    buf_list_vecs == oracle_vecs,
-                    "read vecs didn't match: buf_list: {:?} == oracle: {:?}",
-                    buf_list_vecs,
-                    oracle_vecs
-                );
-            }
-            Self::ReadExact(buf_size) => {
-                eprintln!("buf_size: {}", buf_size);
-
-                // Must initialize the whole vec here so &mut returns the whole buffer -- can't use
-                // with_capacity!
-                let mut buf_list_buf = vec![0u8; buf_size];
-                let mut oracle_buf = vec![0u8; buf_size];
-
-                let buf_list_res = buf_list.read_exact(&mut buf_list_buf);
-                let oracle_res = oracle.read_exact(&mut oracle_buf);
-                Self::assert_io_result_eq(buf_list_res, oracle_res)
-                    .context("operation result didn't match")?;
-                ensure!(buf_list_buf == oracle_buf, "read buffer matches");
-            }
-            Self::Consume(amt) => {
-                eprintln!("amt: {}", amt);
-
-                buf_list.consume(amt);
-                oracle.consume(amt);
-            }
-            Self::BufChunk => {
-                eprintln!("buf_chunk");
-
-                let buf_list_chunk = buf_list.chunk();
-                let oracle_chunk = oracle.chunk();
-
-                // We can't directly compare chunks because BufList returns one
-                // segment at a time while oracle returns the entire remaining
-                // buffer. Instead, verify that:
-                //
-                // 1. is_empty matches for both chunks.
-                // 2. Both start with the same data (buf_list's chunk is a prefix of oracle's)
-                ensure!(
-                    buf_list_chunk.is_empty() == oracle_chunk.is_empty(),
-                    "chunk emptiness didn't match: buf_list is_empty {} == oracle is_empty {}",
-                    buf_list_chunk.is_empty(),
-                    oracle_chunk.is_empty()
-                );
-
-                if !buf_list_chunk.is_empty() {
-                    // Verify buf_list's chunk is a prefix of oracle's chunk.
-                    ensure!(
-                        oracle_chunk.starts_with(buf_list_chunk),
-                        "buf_list chunk is not a prefix of oracle chunk"
-                    );
-                }
-            }
-            Self::BufAdvance(amt) => {
-                eprintln!("buf_advance: {}", amt);
-
-                // Skip if already past the end, as the oracle's Buf impl has a debug assertion
-                // that checks position even when advancing by 0.
-                if buf_list.remaining() > 0 || amt == 0 && oracle.remaining() > 0 {
-                    // Cap the advance amount to the remaining bytes to avoid
-                    // hitting the debug assertion in std::io::Cursor's Buf
-                    // impl. While the Buf trait doesn't require this, the
-                    // oracle has a debug_assert that panics if we try to
-                    // advance past the end.
-                    let amt = amt.min(buf_list.remaining());
-                    buf_list.advance(amt);
-                    oracle.advance(amt);
-                } else {
-                    eprintln!("  skipping: cursor past end");
-                }
-            }
-            Self::BufChunksVectored(num_iovs) => {
-                eprintln!("buf_chunks_vectored: {} iovs", num_iovs);
-
-                // First verify remaining() matches.
-                let buf_list_remaining = buf_list.remaining();
-                let oracle_remaining = oracle.remaining();
-                ensure!(
-                    buf_list_remaining == oracle_remaining,
-                    "chunks_vectored: remaining didn't match before \
-                     calling chunks_vectored: buf_list {} == oracle {}",
-                    buf_list_remaining,
-                    oracle_remaining
-                );
-
-                let mut buf_list_iovs = vec![io::IoSlice::new(&[]); num_iovs];
-                let mut oracle_iovs = vec![io::IoSlice::new(&[]); num_iovs];
-
-                let buf_list_filled = buf_list.chunks_vectored(&mut buf_list_iovs);
-                let oracle_filled = oracle.chunks_vectored(&mut oracle_iovs);
-
-                // We can't directly compare filled counts or total bytes
-                // because BufList may have multiple chunks while the oracle
-                // (std::io::Cursor) is contiguous. When there are fewer iovs
-                // than chunks, BufList will only fill what it can, while oracle
-                // fills everything into one iov.
-                //
-                // Instead, we verify that:
-                // 1. Both returned at least some data if there are bytes
-                //    remaining.
-                // 2. The data that was returned matches (buf_list's data is a
-                //    prefix of oracle's data).
-                let buf_list_bytes: Vec<u8> = buf_list_iovs[..buf_list_filled]
-                    .iter()
-                    .flat_map(|iov| iov.as_ref().iter().copied())
-                    .collect();
-                let oracle_bytes: Vec<u8> = oracle_iovs[..oracle_filled]
-                    .iter()
-                    .flat_map(|iov| iov.as_ref().iter().copied())
-                    .collect();
-
-                if buf_list_remaining > 0 && num_iovs > 0 {
-                    // If there are bytes remaining and iovs available, should
-                    // return some data.
-                    ensure!(
-                        !buf_list_bytes.is_empty(),
-                        "chunks_vectored should return some data \
-                         when remaining = {buf_list_remaining} > 0 \
-                         and num_iovs = {num_iovs} > 0"
-                    );
-                    ensure!(
-                        !oracle_bytes.is_empty(),
-                        "oracle chunks_vectored should return some data \
-                         when remaining > 0 and num_iovs > 0"
-                    );
-
-                    // Verify that buf_list's data matches the beginning of
-                    // oracle's data.
-                    ensure!(
-                        oracle_bytes.starts_with(&buf_list_bytes),
-                        "buf_list chunks_vectored data should match beginning \
-                         of oracle data"
-                    );
-
-                    // Verify that all iovs up to buf_list_filled are non-empty.
-                    for (i, iov) in buf_list_iovs[..buf_list_filled].iter().enumerate() {
-                        ensure!(
-                            !iov.is_empty(),
-                            "buf_list iov at index {i} should be non-empty",
-                        );
-                    }
-                } else if buf_list_remaining == 0 {
-                    // If no bytes remaining, should return no data.
-                    ensure!(
-                        buf_list_bytes.is_empty() && oracle_bytes.is_empty(),
-                        "chunks_vectored should return no data when \
-                         remaining == 0"
-                    );
-                }
-                // If num_iovs == 0, we can't check anything since no iovs were
-                // provided. All we're doing is ensuring that buf_list doesn't
-                // panic.
-            }
-            Self::BufCopyToBytes(len) => {
-                eprintln!("buf_copy_to_bytes: {}", len);
-
-                // copy_to_bytes can panic if len > remaining, so check first.
-                let buf_list_remaining = buf_list.remaining();
-                let oracle_remaining = oracle.remaining();
-
-                if len <= buf_list_remaining && len <= oracle_remaining {
-                    let buf_list_bytes = buf_list.copy_to_bytes(len);
-                    let oracle_bytes = oracle.copy_to_bytes(len);
-
-                    ensure!(buf_list_bytes == oracle_bytes, "copy_to_bytes didn't match");
-                } else {
-                    // Both should panic, so skip this operation.
-                    eprintln!("  skipping: len {} > remaining {}", len, buf_list_remaining);
-                }
-            }
-            Self::BufGetU8 => {
-                eprintln!("buf_get_u8");
-
-                if buf_list.remaining() >= 1 && oracle.remaining() >= 1 {
-                    let buf_list_val = buf_list.get_u8();
-                    let oracle_val = oracle.get_u8();
-                    ensure!(
-                        buf_list_val == oracle_val,
-                        "get_u8 didn't match: buf_list {} == oracle {}",
-                        buf_list_val,
-                        oracle_val
-                    );
-                } else {
-                    eprintln!("  skipping: not enough bytes remaining");
-                }
-            }
-            Self::BufGetU64 => {
-                eprintln!("buf_get_u64");
-
-                if buf_list.remaining() >= 8 && oracle.remaining() >= 8 {
-                    let buf_list_val = buf_list.get_u64();
-                    let oracle_val = oracle.get_u64();
-                    ensure!(
-                        buf_list_val == oracle_val,
-                        "get_u64 didn't match: buf_list {} == oracle {}",
-                        buf_list_val,
-                        oracle_val
-                    );
-                } else {
-                    eprintln!("  skipping: not enough bytes remaining");
-                }
-            }
-            Self::BufGetU64Le => {
-                eprintln!("buf_get_u64_le");
-
-                if buf_list.remaining() >= 8 && oracle.remaining() >= 8 {
-                    let buf_list_val = buf_list.get_u64_le();
-                    let oracle_val = oracle.get_u64_le();
-                    ensure!(
-                        buf_list_val == oracle_val,
-                        "get_u64_le didn't match: buf_list {} == oracle {}",
-                        buf_list_val,
-                        oracle_val
-                    );
-                } else {
-                    eprintln!("  skipping: not enough bytes remaining");
-                }
-            }
-            #[cfg(feature = "tokio1")]
-            Self::PollRead { capacity, filled } => {
-                use std::{mem::MaybeUninit, pin::Pin, task::Poll};
-                use tokio::io::{AsyncRead, ReadBuf};
-
-                let mut buf_list_vec = vec![MaybeUninit::uninit(); capacity];
-                let mut oracle_vec = buf_list_vec.clone();
-
-                let mut buf_list_buf = ReadBuf::uninit(&mut buf_list_vec);
-
-                let fill_vec = vec![0u8; filled];
-                buf_list_buf.put_slice(&fill_vec);
-
-                let mut oracle_buf = ReadBuf::uninit(&mut oracle_vec);
-                oracle_buf.put_slice(&fill_vec);
-
-                eprintln!("capacity: {}, filled: {}", capacity, filled);
-
-                let waker = dummy_waker::dummy_waker();
-                let mut context = std::task::Context::from_waker(&waker);
-                let mut buf_list_pinned = Pin::new(buf_list);
-                let buf_list_res = match buf_list_pinned
-                    .as_mut()
-                    .poll_read(&mut context, &mut buf_list_buf)
-                {
-                    Poll::Ready(res) => res,
-                    Poll::Pending => unreachable!("buf_list never returns pending"),
-                };
-
-                let mut oracle_pinned = Pin::new(oracle);
-                let oracle_res = match oracle_pinned
-                    .as_mut()
-                    .poll_read(&mut context, &mut oracle_buf)
-                {
-                    Poll::Ready(res) => res,
-                    Poll::Pending => unreachable!("oracle cursor never returns pending"),
-                };
-
-                Self::assert_io_result_eq(buf_list_res, oracle_res)
-                    .context("result didn't match")?;
-                ensure!(
-                    buf_list_buf.filled() == oracle_buf.filled(),
-                    "filled section didn't match"
-                );
-                ensure!(
-                    buf_list_buf.remaining() == oracle_buf.remaining(),
-                    "remaining count didn't match"
-                );
-
-                // Put buf_list and oracle back into their original places.
-                buf_list = buf_list_pinned.get_mut();
-                oracle = oracle_pinned.get_mut();
-            }
-        }
-
-        // Check general properties: remaining and has_remaining are the same.
-        let buf_list_remaining = buf_list.remaining();
-        let oracle_remaining = oracle.remaining();
-        ensure!(
-            buf_list_remaining == oracle_remaining,
-            "remaining didn't match: buf_list {} == oracle {}",
-            buf_list_remaining,
-            oracle_remaining
-        );
-
-        let buf_list_has_remaining = buf_list.has_remaining();
-        let oracle_has_remaining = oracle.has_remaining();
-        ensure!(
-            buf_list_has_remaining == oracle_has_remaining,
-            "has_remaining didn't match: buf_list {} == oracle {}",
-            buf_list_has_remaining,
-            oracle_has_remaining
-        );
-
-        // Also check that the position is the same.
-        let buf_list_position = buf_list.position();
-        ensure!(
-            buf_list_position == oracle.position(),
-            "position didn't match: buf_list position {} == oracle position {}",
-            buf_list_position,
-            oracle.position(),
-        );
-        Self::assert_io_result_eq(buf_list.stream_position(), oracle.stream_position())
-            .context("stream position didn't match")?;
-
-        // Check that fill_buf returns an empty slice iff it is actually empty.
-        let fill_buf = buf_list.fill_buf().expect("fill_buf never errors");
-        if buf_list_position < num_bytes as u64 {
+fn assert_io_result_eq<T: Eq + fmt::Debug>(
+    buf_list_res: io::Result<T>,
+    oracle_res: io::Result<T>,
+) -> Result<()> {
+    match (buf_list_res, oracle_res) {
+        (Ok(buf_list_value), Ok(oracle_value)) => {
             ensure!(
-                !fill_buf.is_empty(),
-                "fill_buf cannot be empty since buf_list.position {} < num_bytes {}",
-                buf_list_position,
-                num_bytes,
+                buf_list_value == oracle_value,
+                "value didn't match: buf_list value {:?} == oracle value {:?}",
+                buf_list_value,
+                oracle_value
             );
-        } else {
-            ensure!(
-                fill_buf.is_empty(),
-                "fill_buf must be empty since buf_list.position {} >= num_bytes {}",
-                buf_list_position,
-                num_bytes,
+        }
+        (Ok(buf_list_value), Err(oracle_err)) => {
+            bail!(
+                "BufList value Ok({:?}) is not the same as oracle error Err({})",
+                buf_list_value,
+                oracle_err,
+            );
+        }
+        (Err(buf_list_err), Ok(oracle_value)) => {
+            bail!(
+                "BufList error ({}) is not the same as oracle value ({:?})",
+                buf_list_err,
+                oracle_value
             )
         }
-
-        // Finally, check that the internal invariants are upheld.
-        buf_list.assert_invariants()?;
-
-        Ok(())
+        (Err(buf_list_err), Err(oracle_err)) => {
+            // The kinds should match.
+            ensure!(
+                buf_list_err.kind() == oracle_err.kind(),
+                "error kind didn't match: buf_list {:?} == oracle {:?}",
+                buf_list_err.kind(),
+                oracle_err.kind()
+            );
+        }
     }
 
-    fn assert_io_result_eq<T: Eq + fmt::Debug>(
-        buf_list_res: io::Result<T>,
-        oracle_res: io::Result<T>,
-    ) -> Result<()> {
-        match (buf_list_res, oracle_res) {
-            (Ok(buf_list_value), Ok(oracle_value)) => {
-                ensure!(
-                    buf_list_value == oracle_value,
-                    "value didn't match: buf_list value {:?} == oracle value {:?}",
-                    buf_list_value,
-                    oracle_value
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Stateful (model-based) cursor test.
+// ---------------------------------------------------------------------------
+
+struct CursorStatefulTest<'a> {
+    buf_list_cursor: crate::Cursor<&'a BufList>,
+    oracle_cursor: io::Cursor<&'a [u8]>,
+    num_bytes: usize,
+}
+
+#[hegel::state_machine]
+impl CursorStatefulTest<'_> {
+    // -- Position / seek rules -----------------------------------------------
+
+    #[rule]
+    fn set_position(&mut self, tc: hegel::TestCase) {
+        // Allow going past the end of the list a bit.
+        let pos = tc.draw(generators::integers::<usize>().max_value(self.num_bytes * 5 / 4)) as u64;
+        self.buf_list_cursor.set_position(pos);
+        self.oracle_cursor.set_position(pos);
+    }
+
+    #[rule]
+    fn seek_start(&mut self, tc: hegel::TestCase) {
+        let pos = tc.draw(generators::integers::<usize>().max_value(self.num_bytes * 5 / 4)) as u64;
+        let style = SeekFrom::Start(pos);
+        assert_io_result_eq(
+            self.buf_list_cursor.seek(style),
+            self.oracle_cursor.seek(style),
+        )
+        .unwrap();
+    }
+
+    #[rule]
+    fn seek_end(&mut self, tc: hegel::TestCase) {
+        // Allow going past the beginning and end of the list a bit.
+        let raw = tc.draw(generators::integers::<usize>().max_value(self.num_bytes * 3 / 2));
+        let offset = raw as i64 - (1 + self.num_bytes * 5 / 4) as i64;
+        let style = SeekFrom::End(offset);
+        assert_io_result_eq(
+            self.buf_list_cursor.seek(style),
+            self.oracle_cursor.seek(style),
+        )
+        .unwrap();
+    }
+
+    #[rule]
+    fn seek_current(&mut self, tc: hegel::TestCase) {
+        let raw = tc.draw(generators::integers::<usize>().max_value(self.num_bytes * 3 / 2));
+        // Center the index at roughly 0.
+        let offset = raw as i64 - (self.num_bytes * 3 / 4) as i64;
+        let style = SeekFrom::Current(offset);
+        assert_io_result_eq(
+            self.buf_list_cursor.seek(style),
+            self.oracle_cursor.seek(style),
+        )
+        .unwrap();
+    }
+
+    // -- Read rules ----------------------------------------------------------
+
+    #[rule]
+    fn read(&mut self, tc: hegel::TestCase) {
+        let buf_size = tc.draw(generators::integers::<usize>().max_value(self.num_bytes * 5 / 4));
+        let mut bl_buf = vec![0u8; buf_size];
+        let mut o_buf = vec![0u8; buf_size];
+        assert_io_result_eq(
+            self.buf_list_cursor.read(&mut bl_buf),
+            self.oracle_cursor.read(&mut o_buf),
+        )
+        .unwrap();
+        assert_eq!(bl_buf, o_buf, "read buffer mismatch");
+    }
+
+    #[rule]
+    fn read_vectored(&mut self, tc: hegel::TestCase) {
+        let n_bufs = tc.draw(generators::integers::<usize>().max_value(7));
+        let mut bl_vecs: Vec<Vec<u8>> = (0..n_bufs)
+            .map(|_| vec![0u8; tc.draw(generators::integers::<usize>().max_value(self.num_bytes))])
+            .collect();
+        let mut o_vecs = bl_vecs.clone();
+
+        let mut bl_slices: Vec<_> = bl_vecs.iter_mut().map(|v| IoSliceMut::new(v)).collect();
+        let mut o_slices: Vec<_> = o_vecs.iter_mut().map(|v| IoSliceMut::new(v)).collect();
+
+        assert_io_result_eq(
+            self.buf_list_cursor.read_vectored(&mut bl_slices),
+            self.oracle_cursor.read_vectored(&mut o_slices),
+        )
+        .unwrap();
+        assert_eq!(bl_vecs, o_vecs, "read_vectored buffer mismatch");
+    }
+
+    #[rule]
+    fn read_exact(&mut self, tc: hegel::TestCase) {
+        let buf_size = tc.draw(generators::integers::<usize>().max_value(self.num_bytes * 5 / 4));
+        let mut bl_buf = vec![0u8; buf_size];
+        let mut o_buf = vec![0u8; buf_size];
+        assert_io_result_eq(
+            self.buf_list_cursor.read_exact(&mut bl_buf),
+            self.oracle_cursor.read_exact(&mut o_buf),
+        )
+        .unwrap();
+        assert_eq!(bl_buf, o_buf, "read_exact buffer mismatch");
+    }
+
+    #[rule]
+    fn consume(&mut self, tc: hegel::TestCase) {
+        let amt = tc.draw(generators::integers::<usize>().max_value(self.num_bytes * 5 / 4));
+        self.buf_list_cursor.consume(amt);
+        self.oracle_cursor.consume(amt);
+    }
+
+    // -- Buf trait rules -----------------------------------------------------
+
+    #[rule]
+    fn buf_chunk(&mut self, _: hegel::TestCase) {
+        let bl_chunk = self.buf_list_cursor.chunk();
+        let o_chunk = self.oracle_cursor.chunk();
+        // BufList returns one segment at a time while oracle returns the entire
+        // remaining buffer. Verify emptiness matches and that buf_list's chunk
+        // is a prefix of oracle's.
+        assert_eq!(
+            bl_chunk.is_empty(),
+            o_chunk.is_empty(),
+            "chunk emptiness mismatch"
+        );
+        if !bl_chunk.is_empty() {
+            assert!(
+                o_chunk.starts_with(bl_chunk),
+                "buf_list chunk is not a prefix of oracle chunk"
+            );
+        }
+    }
+
+    #[rule]
+    fn buf_advance(&mut self, tc: hegel::TestCase) {
+        let amt = tc.draw(generators::integers::<usize>().max_value(self.num_bytes * 5 / 4));
+        // Skip if already past the end, as the oracle's Buf impl has a debug
+        // assertion that checks position even when advancing by 0.
+        if self.buf_list_cursor.remaining() > 0 || (amt == 0 && self.oracle_cursor.remaining() > 0)
+        {
+            let amt = amt.min(self.buf_list_cursor.remaining());
+            self.buf_list_cursor.advance(amt);
+            self.oracle_cursor.advance(amt);
+        }
+    }
+
+    #[rule]
+    fn buf_chunks_vectored(&mut self, tc: hegel::TestCase) {
+        let num_iovs = tc.draw(generators::integers::<usize>().max_value(self.num_bytes));
+        let remaining = self.buf_list_cursor.remaining();
+        assert_eq!(
+            remaining,
+            self.oracle_cursor.remaining(),
+            "remaining mismatch before chunks_vectored"
+        );
+
+        let mut bl_iovs = vec![io::IoSlice::new(&[]); num_iovs];
+        let mut o_iovs = vec![io::IoSlice::new(&[]); num_iovs];
+        let bl_filled = self.buf_list_cursor.chunks_vectored(&mut bl_iovs);
+        let o_filled = self.oracle_cursor.chunks_vectored(&mut o_iovs);
+
+        let bl_bytes: Vec<u8> = bl_iovs[..bl_filled]
+            .iter()
+            .flat_map(|iov| iov.as_ref().iter().copied())
+            .collect();
+        let o_bytes: Vec<u8> = o_iovs[..o_filled]
+            .iter()
+            .flat_map(|iov| iov.as_ref().iter().copied())
+            .collect();
+
+        if remaining > 0 && num_iovs > 0 {
+            assert!(
+                !bl_bytes.is_empty(),
+                "should return data when remaining > 0"
+            );
+            assert!(
+                !o_bytes.is_empty(),
+                "oracle should return data when remaining > 0"
+            );
+            assert!(
+                o_bytes.starts_with(&bl_bytes),
+                "buf_list data should match beginning of oracle data"
+            );
+            for (i, iov) in bl_iovs[..bl_filled].iter().enumerate() {
+                assert!(
+                    !iov.is_empty(),
+                    "buf_list iov at index {i} should be non-empty"
                 );
             }
-            (Ok(buf_list_value), Err(oracle_err)) => {
-                bail!(
-                    "BufList value Ok({:?}) is not the same as oracle error Err({})",
-                    buf_list_value,
-                    oracle_err,
-                );
-            }
-            (Err(buf_list_err), Ok(oracle_value)) => {
-                bail!(
-                    "BufList error ({}) is not the same as oracle value ({:?})",
-                    buf_list_err,
-                    oracle_value
-                )
-            }
-            (Err(buf_list_err), Err(oracle_err)) => {
-                // The kinds should match.
-                ensure!(
-                    buf_list_err.kind() == oracle_err.kind(),
-                    "error kind didn't match: buf_list {:?} == oracle {:?}",
-                    buf_list_err.kind(),
-                    oracle_err.kind()
-                );
-            }
+        } else if remaining == 0 {
+            assert!(
+                bl_bytes.is_empty() && o_bytes.is_empty(),
+                "should return no data when remaining == 0"
+            );
+        }
+    }
+
+    #[rule]
+    fn buf_copy_to_bytes(&mut self, tc: hegel::TestCase) {
+        let len = tc.draw(generators::integers::<usize>().max_value(self.num_bytes * 5 / 4));
+        // copy_to_bytes panics if len > remaining, so guard.
+        if len <= self.buf_list_cursor.remaining() && len <= self.oracle_cursor.remaining() {
+            let bl_bytes = self.buf_list_cursor.copy_to_bytes(len);
+            let o_bytes = self.oracle_cursor.copy_to_bytes(len);
+            assert_eq!(bl_bytes, o_bytes, "copy_to_bytes mismatch");
+        }
+    }
+
+    #[rule]
+    fn buf_get_u8(&mut self, _: hegel::TestCase) {
+        if self.buf_list_cursor.remaining() >= 1 && self.oracle_cursor.remaining() >= 1 {
+            assert_eq!(
+                self.buf_list_cursor.get_u8(),
+                self.oracle_cursor.get_u8(),
+                "get_u8 mismatch"
+            );
+        }
+    }
+
+    #[rule]
+    fn buf_get_u64(&mut self, _: hegel::TestCase) {
+        if self.buf_list_cursor.remaining() >= 8 && self.oracle_cursor.remaining() >= 8 {
+            assert_eq!(
+                self.buf_list_cursor.get_u64(),
+                self.oracle_cursor.get_u64(),
+                "get_u64 mismatch"
+            );
+        }
+    }
+
+    #[rule]
+    fn buf_get_u64_le(&mut self, _: hegel::TestCase) {
+        if self.buf_list_cursor.remaining() >= 8 && self.oracle_cursor.remaining() >= 8 {
+            assert_eq!(
+                self.buf_list_cursor.get_u64_le(),
+                self.oracle_cursor.get_u64_le(),
+                "get_u64_le mismatch"
+            );
+        }
+    }
+
+    // -- Async rules ---------------------------------------------------------
+
+    #[cfg(feature = "tokio1")]
+    #[rule]
+    fn poll_read(&mut self, tc: hegel::TestCase) {
+        use std::{mem::MaybeUninit, pin::Pin, task::Poll};
+        use tokio::io::{AsyncRead, ReadBuf};
+
+        let capacity = tc.draw(generators::integers::<usize>().max_value(self.num_bytes * 5 / 4));
+        let filled = tc.draw(generators::integers::<usize>().max_value(capacity));
+
+        let mut bl_vec = vec![MaybeUninit::uninit(); capacity];
+        let mut o_vec = bl_vec.clone();
+
+        let mut bl_buf = ReadBuf::uninit(&mut bl_vec);
+        let fill_vec = vec![0u8; filled];
+        bl_buf.put_slice(&fill_vec);
+
+        let mut o_buf = ReadBuf::uninit(&mut o_vec);
+        o_buf.put_slice(&fill_vec);
+
+        let waker = dummy_waker::dummy_waker();
+        let mut context = std::task::Context::from_waker(&waker);
+
+        let bl_res = match Pin::new(&mut self.buf_list_cursor).poll_read(&mut context, &mut bl_buf)
+        {
+            Poll::Ready(res) => res,
+            Poll::Pending => unreachable!("buf_list never returns pending"),
+        };
+
+        let o_res = match Pin::new(&mut self.oracle_cursor).poll_read(&mut context, &mut o_buf) {
+            Poll::Ready(res) => res,
+            Poll::Pending => unreachable!("oracle cursor never returns pending"),
+        };
+
+        assert_io_result_eq(bl_res, o_res).unwrap();
+        assert_eq!(bl_buf.filled(), o_buf.filled(), "filled section mismatch");
+        assert_eq!(
+            bl_buf.remaining(),
+            o_buf.remaining(),
+            "remaining count mismatch"
+        );
+    }
+
+    // -- Invariant -----------------------------------------------------------
+
+    #[invariant]
+    fn cursors_agree(&mut self, _: hegel::TestCase) {
+        assert_eq!(
+            self.buf_list_cursor.remaining(),
+            self.oracle_cursor.remaining(),
+            "remaining mismatch"
+        );
+        assert_eq!(
+            self.buf_list_cursor.has_remaining(),
+            self.oracle_cursor.has_remaining(),
+            "has_remaining mismatch"
+        );
+
+        let bl_position = self.buf_list_cursor.position();
+        assert_eq!(
+            bl_position,
+            self.oracle_cursor.position(),
+            "position mismatch"
+        );
+        assert_io_result_eq(
+            self.buf_list_cursor.stream_position(),
+            self.oracle_cursor.stream_position(),
+        )
+        .unwrap();
+
+        // fill_buf returns an empty slice iff we're at or past the end.
+        let fill_buf = self
+            .buf_list_cursor
+            .fill_buf()
+            .expect("fill_buf never errors");
+        if bl_position < self.num_bytes as u64 {
+            assert!(
+                !fill_buf.is_empty(),
+                "fill_buf cannot be empty since position {} < num_bytes {}",
+                bl_position,
+                self.num_bytes,
+            );
+        } else {
+            assert!(
+                fill_buf.is_empty(),
+                "fill_buf must be empty since position {} >= num_bytes {}",
+                bl_position,
+                self.num_bytes,
+            );
         }
 
-        Ok(())
+        self.buf_list_cursor
+            .assert_invariants()
+            .expect("internal invariants violated");
     }
+}
+
+/// Assert that buf_list's cursor behaves identically to std::io::Cursor.
+#[hegel::test(test_cases = 200)]
+fn hegel_cursor_stateful(tc: hegel::TestCase) {
+    let buf_list = tc.draw(buf_lists());
+    let num_bytes = buf_list.num_bytes();
+    let oracle_data: Vec<u8> = buf_list
+        .clone()
+        .copy_to_bytes(buf_list.remaining())
+        .to_vec();
+    let m = CursorStatefulTest {
+        buf_list_cursor: crate::Cursor::new(&buf_list),
+        oracle_cursor: io::Cursor::new(&oracle_data),
+        num_bytes,
+    };
+    hegel::stateful::run(m, tc);
 }
 
 #[test]
