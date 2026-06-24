@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Changed
+
+- MSRV updated to Rust 1.86.
+
 ## [1.1.2] - 2025-10-02
 
 Simplify `Buf::chunks_vectored` implementations for `BufList` and `Cursor<T>`.
@@ -78,6 +84,7 @@ Simplify `Buf::chunks_vectored` implementations for `BufList` and `Cursor<T>`.
 
 - Initial release.
 
+[Unreleased]: https://github.com/sunshowers-code/buf-list/compare/1.1.2...HEAD
 [1.1.2]: https://github.com/sunshowers-code/buf-list/releases/tag/1.1.2
 [1.1.1]: https://github.com/sunshowers-code/buf-list/releases/tag/1.1.1
 [1.1.0]: https://github.com/sunshowers-code/buf-list/releases/tag/1.1.0
