@@ -14,13 +14,15 @@ use std::{
 
 #[hegel::composite]
 fn buf_lists(tc: hegel::TestCase) -> BufList {
+    let num_chunks = tc.draw(generators::integers::<usize>().max_value(128));
     let chunks: Vec<Vec<u8>> = tc.draw(
         generators::vecs(
             generators::vecs(generators::integers::<u8>())
                 .min_size(1)
                 .max_size(127),
         )
-        .max_size(31),
+        .min_size(num_chunks)
+        .max_size(num_chunks),
     );
     chunks.into_iter().map(Bytes::from).collect()
 }
@@ -412,6 +414,9 @@ impl CursorStatefulTest<'_> {
 fn hegel_cursor_stateful(tc: hegel::TestCase) {
     let buf_list = tc.draw(buf_lists());
     let num_bytes = buf_list.num_bytes();
+    // Tell Hegel to optimize for lots of chunks, because bugs are more likely
+    // to happen at chunk boundaries.
+    tc.target(buf_list.num_chunks() as f64);
     let oracle_data: Vec<u8> = buf_list
         .clone()
         .copy_to_bytes(buf_list.remaining())

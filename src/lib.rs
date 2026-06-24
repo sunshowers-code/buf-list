@@ -113,7 +113,7 @@
 //!
 //! # Minimum supported Rust version
 //!
-//! The minimum supported Rust version (MSRV) is **1.70**. Optional features may
+//! The minimum supported Rust version (MSRV) is **1.86**. Optional features may
 //! cause a bump in the MSRV.
 //!
 //! `buf-list` has a conservative MSRV policy. MSRV bumps will be sparing, and
